@@ -1,0 +1,19 @@
+{
+  "name": "fish-pond-art",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "p5": "^1.11.11"
+  },
+  "devDependencies": {
+    "@types/p5": "^1.7.7",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
+  }
+}
