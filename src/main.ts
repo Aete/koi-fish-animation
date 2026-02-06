@@ -20,11 +20,6 @@ const sketch = (p: p5) => {
     // Physics 초기화
     physics = new Physics(p.width, p.height);
 
-    // p5.brush 초기화
-    if (window.brush) {
-      window.brush.set("marker", p.color(0), 1);
-    }
-
     // 물고기 생성 (화면 전체에 랜덤 배치)
     for (let i = 0; i < FISH_COUNT; i++) {
       const x = p.random(100, p.width - 100);
@@ -33,7 +28,7 @@ const sketch = (p: p5) => {
     }
 
     // 배경 설정 (한지 느낌)
-    p.background(250, 247, 240);
+    p.background(255, 255, 255);
 
     // 한지 질감 생성
     createPaperTexture();
@@ -46,9 +41,9 @@ const sketch = (p: p5) => {
   const createPaperTexture = () => {
     paperTexture = p.createGraphics(p.width, p.height);
     const noiseScale = 0.015;
-    const backR = 250,
-      backG = 247,
-      backB = 240;
+    const backR = 255,
+      backG = 255,
+      backB = 255;
 
     // 베이스 배경색 먼저 채우기
     paperTexture.background(backR, backG, backB);
