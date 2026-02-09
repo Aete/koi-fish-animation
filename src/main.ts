@@ -30,8 +30,9 @@ const sketch = (p: p5) => {
     // 배경 설정 (한지 느낌)
     p.background(255, 255, 255);
 
-    // 한지 질감 생성
+    // 한지 질감 생성 후 캔버스에 한 번만 그리기
     createPaperTexture();
+    p.image(paperTexture, 0, 0);
 
     // 자동 루프 활성화 (마우스 따라가기)
     // p.noLoop();
@@ -64,7 +65,7 @@ const sketch = (p: p5) => {
           backR + colorVar,
           backG + colorVar,
           backB + colorVar,
-          n * 200
+          n * 200,
         );
         paperTexture.strokeWeight(stride); // strokeWeight를 stride에 맞게 조정
         paperTexture.point(x, y);
@@ -77,7 +78,7 @@ const sketch = (p: p5) => {
         const n = p.constrain(
           p.noise((x * scaledNoise) / 3, y * scaledNoise),
           0,
-          1.6
+          1.6,
         );
         paperTexture.stroke(255, 255, 250, n * 180);
         paperTexture.strokeWeight(stride);
@@ -98,10 +99,7 @@ const sketch = (p: p5) => {
   };
 
   p.draw = () => {
-    // 한지 질감 배경 표시
-    p.image(paperTexture, 0, 0);
-
-    // 반투명 레이어로 잔상 효과 (먹이 번지는 느낌) - 투명도 더 낮춤
+    // 반투명 레이어로 잔상 효과 (먹이 번지는 느낌)
     p.fill(250, 247, 240, 20);
     p.noStroke();
     p.rect(0, 0, p.width, p.height);
@@ -134,7 +132,7 @@ const sketch = (p: p5) => {
     p.noStroke();
     p.textSize(12);
     p.textAlign(p.LEFT, p.TOP);
-    p.text(`FPS: ${(displayInfo as any)._fps || '—'}`, 10, 10);
+    p.text(`FPS: ${(displayInfo as any)._fps || "—"}`, 10, 10);
     p.text(`물고기: ${fishes.length}`, 10, 25);
     p.text(`클릭하여 물고기 추가`, 10, 40);
   };

@@ -4,7 +4,7 @@ import type p5 from 'p5';
 
 // 유선형 잉어 프로파일 (seg5→seg0 순서) - 매 프레임 재생성 방지
 // 8세그먼트 유선형 프로파일 (seg7→seg0 순서) - 잎사귀형 잉어 실루엣
-const KOI_PROFILE = [0.45, 0.8, 1.05, 1.25, 1.5, 1.4, 1.1, 0.75] as const;
+const KOI_PROFILE = [0.35, 0.55, 0.75, 0.95, 1.0, 1.08, 1.0, 0.8] as const;
 
 // Catmull-Rom 스플라인 보간 (모듈 레벨로 이동하여 클로저 재생성 방지)
 function interpolateSpline(pts: {x: number, y: number}[], subdivisions: number): {x: number, y: number}[] {
@@ -69,6 +69,15 @@ export class Fish {
   // 헤엄치기 애니메이션
   swimOffset: number;
 
+  // 렌더링 노이즈 시드 (프레임 간 안정적)
+  noiseSeed: number;
+
+  // 반점 패턴 (body 길이 비율 0~1, 폭 비율 0~1, 크기)
+  spotPattern: { along: number; across: number; size: number }[];
+
+  // 반점/꼬리 색상 (다홍색 or 푸른색)
+  accentRGB: [number, number, number];
+
   // 이동 방향 (실제 속도 벡터의 각도)
   movementAngle: number;
 
@@ -87,16 +96,36 @@ export class Fish {
     this.acceleration = p.createVector(0, 0);
 
     // 크기 베리에이션 추가 (80 ~ 140)
-    this.size = p.random(120, 210);
+    this.size = p.random(210, 360);
 
-    // 크기에 따라 속도도 약간 조정 (작은 물고기가 약간 더 빠름)
-    const sizeRatio = p.map(this.size, 80, 140, 1.2, 0.9);
+    // 크기에 따라 속도 조정 (큰 물고기는 느리고 우아하게, 작은 물고기는 빠르게)
+    const sizeRatio = p.map(this.size, 173, 302, 1.15, 0.75);
     this.maxSpeed = p.random(1.5, 2.5) * sizeRatio;
     this.maxForce = 0.15;
 
     this.wanderTheta = 0;
     this.swimOffset = 0;
+    this.noiseSeed = p.random(10000);
     this.movementAngle = 0; // 초기 방향
+
+    // 반점 색상 랜덤 결정 (다홍색 or 푸른색)
+    this.accentRGB = p.random() < 0.5
+      ? [220, 100, 30]   // 다홍색
+      : [30, 80, 180];   // 푸른색
+
+    // 반점 패턴 생성 (2~4개, 겹치지 않게 분산)
+    const spotCount = Math.floor(p.random(2, 5));
+    this.spotPattern = [];
+    // 몸통을 spotCount 구간으로 나누어 각 구간에 1개씩 배치
+    for (let i = 0; i < spotCount; i++) {
+      const sectionStart = 0.15 + (0.7 / spotCount) * i;
+      const sectionEnd = 0.15 + (0.7 / spotCount) * (i + 1);
+      this.spotPattern.push({
+        along: p.random(sectionStart, sectionEnd),  // 구간별 분산 배치
+        across: p.random(0.1, 0.9),                 // 폭 방향 더 넓게
+        size: p.random(0.25, 0.5),                   // 반점 크기
+      });
+    }
 
     // 미니멀 디자인: 검은색 몸통 + 청록색 또는 분홍색 포인트
     const accentColorChoices = [
@@ -116,7 +145,7 @@ export class Fish {
 
     // IK 골격 시스템 초기화 (크기에 비례)
     this.segmentCount = 8; // 세그먼트 증가 (6→8, 더 부드러운 곡선)
-    this.segmentLength = this.size * 0.085; // 세그먼트 길이 조정 (총 길이 유사하게)
+    this.segmentLength = this.size * 0.06; // 세그먼트 길이 감소 (0.07→0.06)
     this.segments = [];
     this.swimOffset = 0;
 
@@ -194,11 +223,13 @@ export class Fish {
       const angleDiff = targetAngle - this.movementAngle;
       // 각도 차이를 -PI ~ PI 범위로 정규화
       const normalizedDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-      this.movementAngle += normalizedDiff * 0.2; // 부드럽게 회전
+      const maxTurn = (20 * Math.PI) / 180; // 한 프레임당 최대 20도
+      const turnAmount = Math.max(-maxTurn, Math.min(maxTurn, normalizedDiff * 0.2));
+      this.movementAngle += turnAmount; // 부드럽게 회전 (최대 20도 제한)
     }
 
     // 헤엄치기 애니메이션 (속도에 비례, 부드럽게)
-    this.swimOffset += speed * 0.08; // 속도에 비례, 더 부드럽게
+    this.swimOffset += speed * 0.15; // 속도에 비례, 빠른 주기
 
     // IK 골격 업데이트
     this.updateSkeleton();
@@ -210,7 +241,7 @@ export class Fish {
   updateSkeleton(): void {
     // 첫 번째 세그먼트(머리)가 목표 위치를 따라가며 뒤쪽을 향함
     // + 머리도 좌우로 흔들림 (±10도)
-    const headSwingAmplitude = Math.PI / 18; // 10도
+    const headSwingAmplitude = Math.PI / 22; // 약 8도 (머리는 안정적으로)
     const headSwingAngle = Math.sin(this.swimOffset) * headSwingAmplitude;
 
     this.segments[0].a.set(this.position.x, this.position.y);
@@ -221,8 +252,9 @@ export class Fish {
     // + 헤엄치기 효과: sine wave로 각도만 흔들림
     for (let i = 1; i < this.segments.length; i++) {
       // 헤엄치기 효과: 꼬리로 갈수록 더 크게 각도 변화
-      const swimAngleAmplitude = (i / this.segments.length) * 0.25; // 각도 흔들림 크기 (라디안)
-      const swimFrequency = 0.15; // 흔들림 속도
+      const t = i / this.segments.length;
+      const swimAngleAmplitude = t * t * t * 0.8; // 세제곱 커브: 몸통은 거의 안 움직이고 꼬리만 강하게
+      const swimFrequency = 0.7; // 위상 차 증가 (0.15→0.7, 파동 전파)
       const angleOffset = Math.sin(this.swimOffset + i * swimFrequency) * swimAngleAmplitude;
 
       // 이전 세그먼트의 각도를 따라가되, 약간의 각도 offset 추가
@@ -281,7 +313,7 @@ export class Fish {
     // 크기 스케일 (기준 크기 120 대비)
     const sizeScale = this.size / 120;
 
-    const circleRadius = 10 * sizeScale;  // 몸통 크기 증가 (8.4→10)
+    const circleRadius = 9.5 * sizeScale;  // 몸통 폭 축소 (11→9.5)
     const tailSeg = this.segments[this.segmentCount - 1];
     const tailBaseAngle = tailSeg.angle;
 
@@ -291,10 +323,10 @@ export class Fish {
     const hingeY = tailSeg.b.y - Math.sin(tailBaseAngle) * tailOffset;
 
     // 꼬리 설정 (크기에 비례)
-    const tailLength = 25 * sizeScale;
+    const tailLength = 18 * sizeScale;
     const tailSpread = Math.PI / 4;
-    const maxTailSwing = Math.PI / 15;
-    const tailSwingAngle = Math.sin(this.swimOffset * 0.25) * maxTailSwing;
+    const maxTailSwing = Math.PI / 6;
+    const tailSwingAngle = Math.sin(this.swimOffset) * maxTailSwing;
 
     const upperTailAngle = tailBaseAngle + tailSpread / 2 + tailSwingAngle;
     const upperTailTip = {
@@ -326,7 +358,7 @@ export class Fish {
       x: this.position.x,
       y: this.position.y,
       angle: this.segments[0].angle,
-      thickness: circleRadius * 0.65
+      thickness: circleRadius * 0.45
     });
 
     // 윤곽선 점들 계산 - 스플라인 보간으로 부드럽게
@@ -355,9 +387,9 @@ export class Fish {
     const ctx = p.drawingContext as CanvasRenderingContext2D;
 
     // 농담(濃淡) 효과 - 고정 ratio 연속 스트라이프
-    const stripeSpacing = 0.5 * sizeScale; // 간격 증가 (0.3→0.5)
-    const baseThickness = 8 * sizeScale;
-    let noiseVal = this.swimOffset * 0.1;
+    const stripeSpacing = 0.3 * sizeScale;
+    const baseThickness = 4 * sizeScale;
+    let noiseVal = this.noiseSeed;
 
     // 가장 넓은 폭 기준으로 글로벌 줄 수 결정
     let maxWidthSq = 0;
@@ -379,7 +411,7 @@ export class Fish {
     }
 
     const invMaxWidth = maxWidth > 0 ? 1 / maxWidth : 1;
-    const step = 2.5 * sizeScale; // 스텝 증가 (1.5→2.5)
+    const step = 1.2 * sizeScale;
 
     // 각 스트라이프를 모든 세그먼트에 걸쳐 연속으로 그림
     for (let s = 0; s < globalStripes; s++) {
@@ -388,15 +420,21 @@ export class Fish {
 
       // 폭 방향 그라데이션
       const widthCenter = 1 - Math.abs(ratio - 0.5) * 2;
-      const alpha = 0.015 + widthCenter * widthCenter * 0.02;
+      const alpha = 0.01 + widthCenter * widthCenter * 0.012;
       ctx.fillStyle = `rgba(30, 25, 20, ${alpha})`;
 
-      for (let i = 0; i < upperPoints.length - 1; i++) {
+      const totalPts = upperPoints.length;
+      for (let i = 0; i < totalPts - 1; i++) {
         const localRatioLimit1 = widths[i] * invMaxWidth;
         const localRatioLimit2 = widths[i + 1] * invMaxWidth;
         const margin = (1 - Math.min(localRatioLimit1, localRatioLimit2)) * 0.5;
 
         if (ratio < margin || ratio > 1 - margin) continue;
+
+        // 머리 쪽(i가 클수록 머리) 농도 감쇠
+        const lengthPos = i / totalPts;
+        const headFade = lengthPos > 0.7 ? 1 - (lengthPos - 0.7) / 0.3 : 1;
+        ctx.fillStyle = `rgba(30, 25, 20, ${alpha * headFade})`;
 
         const ux1 = upperPoints[i].x, uy1 = upperPoints[i].y;
         const lx1 = lowerPoints[i].x, ly1 = lowerPoints[i].y;
@@ -427,12 +465,49 @@ export class Fish {
       }
     }
 
-    // === 꼬리 지느러미 ===
-    const tailStripes = 6; // 줄 수 감소 (8→6)
-    ctx.fillStyle = `rgba(30, 25, 20, 0.05)`;
-    const tailThickness = 4 * sizeScale;
-    const tailStep = 2.5 * sizeScale;
+    // === 주황색 반점 ===
+    for (const spot of this.spotPattern) {
+      const idx = Math.floor(spot.along * (upperPoints.length - 1));
+      const nextIdx = Math.min(idx + 1, upperPoints.length - 1);
+      const localFrac = spot.along * (upperPoints.length - 1) - idx;
 
+      // 보간된 위치 계산
+      const ux = upperPoints[idx].x + (upperPoints[nextIdx].x - upperPoints[idx].x) * localFrac;
+      const uy = upperPoints[idx].y + (upperPoints[nextIdx].y - upperPoints[idx].y) * localFrac;
+      const lx = lowerPoints[idx].x + (lowerPoints[nextIdx].x - lowerPoints[idx].x) * localFrac;
+      const ly = lowerPoints[idx].y + (lowerPoints[nextIdx].y - lowerPoints[idx].y) * localFrac;
+
+      const cx = ux + (lx - ux) * spot.across;
+      const cy = uy + (ly - uy) * spot.across;
+      const localWidth = Math.sqrt((ux - lx) * (ux - lx) + (uy - ly) * (uy - ly));
+      const spotRadius = localWidth * spot.size;
+
+      // 주황색 점을 부드럽게 여러 겹으로 렌더링
+      const spotSteps = Math.max(Math.floor(spotRadius / (0.8 * sizeScale)), 4);
+      for (let si = 0; si < spotSteps; si++) {
+        for (let sj = 0; sj < spotSteps; sj++) {
+          const sx = cx + (si / spotSteps - 0.5) * spotRadius * 2;
+          const sy = cy + (sj / spotSteps - 0.5) * spotRadius * 2;
+          const dist = Math.sqrt((sx - cx) * (sx - cx) + (sy - cy) * (sy - cy));
+          if (dist > spotRadius) continue;
+          const falloff = 1 - (dist / spotRadius);
+          noiseVal += 0.01;
+          const w = fastNoise(noiseVal) * baseThickness * 0.6;
+          const half = w * 0.5;
+          ctx.fillStyle = `rgba(${this.accentRGB[0]}, ${this.accentRGB[1]}, ${this.accentRGB[2]}, ${0.12 * falloff})`;
+          ctx.fillRect(sx - half, sy - half, w, w);
+        }
+      }
+    }
+
+    // === 꼬리 지느러미 ===
+    const tailStripes = 6;
+    const tailThickness = 2.5 * sizeScale;
+    const tailStep = 1.8 * sizeScale;
+    // 물고기마다 꼬리 다홍색 확률 결정 (noiseSeed 기반)
+    const tailHasRed = fastNoise(this.noiseSeed + 99) > 0.4;
+
+    let tailNoiseVal = this.noiseSeed + 500; // 꼬리 전용 고정 노이즈 시드
     for (let s = 0; s < tailStripes; s++) {
       const ratio = (s + 0.5) / tailStripes;
       const tipX = upperTailTip.x + (lowerTailTip.x - upperTailTip.x) * ratio;
@@ -447,20 +522,28 @@ export class Fish {
         const frac = t * invSteps;
         const x = hingeX + tdx * frac;
         const y = hingeY + tdy * frac;
-        noiseVal += 0.02;
-        const w = fastNoise(noiseVal) * tailThickness;
+        tailNoiseVal += 0.02;
+        const w = fastNoise(tailNoiseVal) * tailThickness;
         const half = w * 0.5;
+        // 먹색 기본 (투명도 10% 증가)
+        ctx.fillStyle = `rgba(30, 25, 20, 0.037)`;
         ctx.fillRect(x - half, y - half, w, w);
+        // 다홍색 랜덤 포인트
+        if (tailHasRed && fastNoise(tailNoiseVal + 7.77) > 0.35) {
+          const accentAlpha = 0.05 * (1 - frac * 0.7);
+          ctx.fillStyle = `rgba(${this.accentRGB[0]}, ${this.accentRGB[1]}, ${this.accentRGB[2]}, ${accentAlpha})`;
+          ctx.fillRect(x - half * 1.3, y - half * 1.3, w * 1.3, w * 1.3);
+        }
       }
     }
 
     // === 지느러미 ===
     const finFlap = Math.sin(this.swimOffset) * 0.5;
-    const finThickness = 3 * sizeScale;
+    const finThickness = 2 * sizeScale;
     const finLength = 22 * sizeScale;
-    const finStripes = 4; // 줄 수 감소 (5→4)
+    const finStripes = 5;
     ctx.fillStyle = `rgba(30, 25, 20, 0.04)`;
-    const finStep = 3 * sizeScale; // 스텝 증가
+    const finStep = 3 * sizeScale;
 
     // 가슴지느러미 헬퍼
     const drawFin = (baseX: number, baseY: number, angle: number, length: number, stripes: number) => {
@@ -515,18 +598,6 @@ export class Fish {
       drawFin(lowerPoints[ventralIdx].x, lowerPoints[ventralIdx].y,
         ventralAngle + p.HALF_PI + ventralFlap, ventralLength, 3);
     }
-
-    // 눈
-    const eyeOffset = circleRadius * 0.55;
-    const eyeRX = this.position.x + Math.cos(headAngle + p.HALF_PI) * eyeOffset;
-    const eyeRY = this.position.y + Math.sin(headAngle + p.HALF_PI) * eyeOffset;
-    const eyeLX = this.position.x + Math.cos(headAngle - p.HALF_PI) * eyeOffset;
-    const eyeLY = this.position.y + Math.sin(headAngle - p.HALF_PI) * eyeOffset;
-
-    p.fill(20, 15, 10, 50);
-    p.noStroke();
-    p.circle(eyeRX, eyeRY, 4 * sizeScale);
-    p.circle(eyeLX, eyeLY, 4 * sizeScale);
 
     // 수염
     const barbelBaseX = this.position.x + Math.cos(headAngle) * circleRadius * 0.9;
