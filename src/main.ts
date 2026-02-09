@@ -10,7 +10,6 @@ const sketch = (p: p5) => {
   let physics: Physics;
   let time = 0;
   const quality: QualitySettings = isMobile() ? MOBILE_QUALITY : DESKTOP_QUALITY;
-  let paperTexture: p5.Graphics; // 한지 질감 레이어
   let trailLayer: p5.Graphics;  // 잔상(먹 번짐) 버퍼
 
   // FPS DOM 엘리먼트
@@ -38,12 +37,7 @@ const sketch = (p: p5) => {
       fishes.push(new Fish(x, y));
     }
 
-    // 배경 설정 (한지 느낌)
-    p.background(255, 255, 255);
-
-    // 한지 질감 생성
-    createPaperTexture();
-    p.image(paperTexture, 0, 0);
+    p.background(255);
 
     // 잔상 레이어 생성 (투명 버퍼)
     trailLayer = p.createGraphics(p.width, p.height);
@@ -56,73 +50,13 @@ const sketch = (p: p5) => {
     document.body.appendChild(fpsDiv);
   };
 
-  // 한지 질감 생성 함수 (최적화 버전)
-  const createPaperTexture = () => {
-    paperTexture = p.createGraphics(p.width, p.height);
-    const noiseScale = 0.015;
-    const backR = 255,
-      backG = 255,
-      backB = 255;
-
-    // 베이스 배경색 먼저 채우기
-    paperTexture.background(backR, backG, backB);
-
-    // 최적화: noiseDetail 옥타브 감소 (10→6으로 40% 빠름)
-    p.noiseDetail(6, 0.7);
-    const scaledNoise = noiseScale * (p.width / 700);
-
-    // 성능 최적화: 픽셀을 건너뛰며 샘플링 (stride)
-    const stride = 3; // 3픽셀마다 샘플링 (9배 빠름)
-
-    // 첫 번째 레이어: 어두운 톤의 질감 (RGB 값도 변화)
-    for (let y = 0; y < p.height; y += stride) {
-      for (let x = 0; x < p.width; x += stride) {
-        const n = p.noise((x * scaledNoise) / 3, y * scaledNoise);
-        const colorVar = p.map(n, 0, 1, -35, 35);
-        paperTexture.stroke(
-          backR + colorVar,
-          backG + colorVar,
-          backB + colorVar,
-          n * 200,
-        );
-        paperTexture.strokeWeight(stride); // strokeWeight를 stride에 맞게 조정
-        paperTexture.point(x, y);
-      }
-    }
-
-    // 두 번째 레이어: 밝은 하이라이트
-    for (let y = 0; y < p.height; y += stride) {
-      for (let x = 0; x < p.width; x += stride) {
-        const n = p.constrain(
-          p.noise((x * scaledNoise) / 3, y * scaledNoise),
-          0,
-          1.6,
-        );
-        paperTexture.stroke(255, 255, 250, n * 180);
-        paperTexture.strokeWeight(stride);
-        paperTexture.point(x - 1, y - 2);
-      }
-    }
-
-    // 세 번째 레이어: 미세한 점들 (한지 섬유 느낌) - 개수 70% 감소
-    const fiberCount = Math.floor(p.width * p.height * 0.015);
-    for (let i = 0; i < fiberCount; i++) {
-      const x = p.random(p.width);
-      const y = p.random(p.height);
-      const n = p.noise(x * scaledNoise, y * scaledNoise);
-      paperTexture.stroke(200, 195, 185, n * 120);
-      paperTexture.strokeWeight(p.random(0.5, 2.5));
-      paperTexture.point(x, y);
-    }
-  };
-
   p.draw = () => {
     // 시간 업데이트
     time += 0.01;
 
     // 1) 잔상 레이어 페이드: 반투명 흰색으로 이전 프레임 흔적을 서서히 지움
     const tCtx = trailLayer.drawingContext as CanvasRenderingContext2D;
-    tCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    tCtx.fillStyle = 'rgba(255, 255, 255, 0.04)';
     tCtx.fillRect(0, 0, p.width, p.height);
 
     // 2) 물고기를 잔상 레이어에 그림
@@ -131,9 +65,8 @@ const sketch = (p: p5) => {
       fish.display(quality, trailLayer);
     }
 
-    // 3) 메인 캔버스: 깨끗한 배경 + 한지 질감 + 잔상 레이어 합성
+    // 3) 메인 캔버스: 깨끗한 배경 + 잔상 레이어 합성
     p.background(255);
-    p.image(paperTexture, 0, 0);
     p.image(trailLayer, 0, 0);
 
     // FPS 표시 (개발용)
@@ -143,7 +76,6 @@ const sketch = (p: p5) => {
   p.windowResized = () => {
     p.resizeCanvas(p.windowWidth, p.windowHeight);
     physics.updateDimensions(p.width, p.height);
-    createPaperTexture();
     trailLayer.remove();
     trailLayer = p.createGraphics(p.width, p.height);
     trailLayer.clear();
@@ -183,7 +115,6 @@ const sketch = (p: p5) => {
         const y = p.random(p.height);
         fishes.push(new Fish(x, y));
       }
-      createPaperTexture();
       trailLayer.clear();
     }
 
