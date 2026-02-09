@@ -175,7 +175,7 @@ export class Fish {
   /**
    * 물고기의 행동 업데이트 (자율 배회)
    */
-  update(physics: Physics, time: number): void {
+  update(_physics: Physics, _time: number): void {
     const p = (window as any).p5Instance;
 
     // 이전 위치 저장
