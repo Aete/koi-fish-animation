@@ -126,11 +126,15 @@ const sketch = (p: p5) => {
   };
 
   const displayInfo = (): void => {
+    // 매 10프레임마다만 FPS 텍스트 갱신 (텍스트 렌더링 부하 감소)
+    if (p.frameCount % 10 === 0) {
+      (displayInfo as any)._fps = p.frameRate().toFixed(0);
+    }
     p.fill(0, 150);
     p.noStroke();
     p.textSize(12);
     p.textAlign(p.LEFT, p.TOP);
-    p.text(`FPS: ${p.frameRate().toFixed(0)}`, 10, 10);
+    p.text(`FPS: ${(displayInfo as any)._fps || '—'}`, 10, 10);
     p.text(`물고기: ${fishes.length}`, 10, 25);
     p.text(`클릭하여 물고기 추가`, 10, 40);
   };

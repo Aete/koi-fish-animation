@@ -2,6 +2,43 @@ import { Physics } from '../world/Physics';
 import { Segment } from './Segment';
 import type p5 from 'p5';
 
+// 유선형 잉어 프로파일 (seg5→seg0 순서) - 매 프레임 재생성 방지
+// 8세그먼트 유선형 프로파일 (seg7→seg0 순서) - 잎사귀형 잉어 실루엣
+const KOI_PROFILE = [0.45, 0.8, 1.05, 1.25, 1.5, 1.4, 1.1, 0.75] as const;
+
+// Catmull-Rom 스플라인 보간 (모듈 레벨로 이동하여 클로저 재생성 방지)
+function interpolateSpline(pts: {x: number, y: number}[], subdivisions: number): {x: number, y: number}[] {
+  const result: {x: number, y: number}[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(i - 1, 0)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(i + 2, pts.length - 1)];
+    for (let t = 0; t < subdivisions; t++) {
+      const f = t / subdivisions;
+      const f2 = f * f;
+      const f3 = f2 * f;
+      const x = 0.5 * ((2 * p1.x) +
+        (-p0.x + p2.x) * f +
+        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * f2 +
+        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * f3);
+      const y = 0.5 * ((2 * p1.y) +
+        (-p0.y + p2.y) * f +
+        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * f2 +
+        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * f3);
+      result.push({ x, y });
+    }
+  }
+  result.push(pts[pts.length - 1]);
+  return result;
+}
+
+// pseudo-noise 해시 (GLSL fract 패턴)
+function fastNoise(seed: number): number {
+  const raw = Math.sin(seed * 12.9898) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
 /**
  * Fish - 물고기 에이전트 클래스
  * 자율적인 행동과 수묵화 스타일 렌더링 (IK 기반)
@@ -35,6 +72,12 @@ export class Fish {
   // 이동 방향 (실제 속도 벡터의 각도)
   movementAngle: number;
 
+  // 재사용 벡터 (매 프레임 할당 방지)
+  private _steerVec!: p5.Vector;
+  private _wanderCircle!: p5.Vector;
+  private _wanderOffset!: p5.Vector;
+  private _wanderTarget!: p5.Vector;
+
   constructor(x: number, y: number) {
     const p = (window as any).p5Instance;
 
@@ -65,9 +108,15 @@ export class Fish {
     this.opacity = 255;
     this.brushType = 'marker'; // p5.brush의 브러시 타입
 
+    // 재사용 벡터 초기화
+    this._steerVec = p.createVector(0, 0);
+    this._wanderCircle = p.createVector(0, 0);
+    this._wanderOffset = p.createVector(0, 0);
+    this._wanderTarget = p.createVector(0, 0);
+
     // IK 골격 시스템 초기화 (크기에 비례)
-    this.segmentCount = 6; // 물고기 몸통 세그먼트 개수
-    this.segmentLength = this.size * 0.11; // 세그먼트 길이 (크기에 비례)
+    this.segmentCount = 8; // 세그먼트 증가 (6→8, 더 부드러운 곡선)
+    this.segmentLength = this.size * 0.085; // 세그먼트 길이 조정 (총 길이 유사하게)
     this.segments = [];
     this.swimOffset = 0;
 
@@ -108,23 +157,23 @@ export class Fish {
     const wanderForce = this.wander();
     this.applyForce(wanderForce);
 
-    // 화면 경계 처리 (부드럽게 튕김)
+    // 화면 경계 처리 (부드럽게 튕김) - 벡터 재사용
     const margin = 50;
     if (this.position.x < margin) {
-      const steer = p.createVector(this.maxForce, 0);
-      this.applyForce(steer);
+      this._steerVec.set(this.maxForce, 0);
+      this.applyForce(this._steerVec);
     }
     if (this.position.x > p.width - margin) {
-      const steer = p.createVector(-this.maxForce, 0);
-      this.applyForce(steer);
+      this._steerVec.set(-this.maxForce, 0);
+      this.applyForce(this._steerVec);
     }
     if (this.position.y < margin) {
-      const steer = p.createVector(0, this.maxForce);
-      this.applyForce(steer);
+      this._steerVec.set(0, this.maxForce);
+      this.applyForce(this._steerVec);
     }
     if (this.position.y > p.height - margin) {
-      const steer = p.createVector(0, -this.maxForce);
-      this.applyForce(steer);
+      this._steerVec.set(0, -this.maxForce);
+      this.applyForce(this._steerVec);
     }
 
     // 물리 업데이트
@@ -204,19 +253,23 @@ export class Fish {
 
     this.wanderTheta += p.random(-wanderChange, wanderChange);
 
-    const circlePos = this.velocity.copy();
-    circlePos.normalize();
-    circlePos.mult(wanderDistance);
+    // 벡터 재사용: copy() 대신 set + normalize + mult
+    this._wanderCircle.set(this.velocity.x, this.velocity.y);
+    this._wanderCircle.normalize();
+    this._wanderCircle.mult(wanderDistance);
 
-    const circleOffset = p.createVector(
+    this._wanderOffset.set(
       wanderRadius * Math.cos(this.wanderTheta),
       wanderRadius * Math.sin(this.wanderTheta)
     );
 
-    const target = p.constructor.Vector.add(circlePos, circleOffset);
-    target.setMag(this.maxForce);
+    this._wanderTarget.set(
+      this._wanderCircle.x + this._wanderOffset.x,
+      this._wanderCircle.y + this._wanderOffset.y
+    );
+    this._wanderTarget.setMag(this.maxForce);
 
-    return target;
+    return this._wanderTarget;
   }
 
   /**
@@ -228,14 +281,14 @@ export class Fish {
     // 크기 스케일 (기준 크기 120 대비)
     const sizeScale = this.size / 120;
 
-    const circleRadius = 7 * sizeScale;  // 몸통 크기 (크기에 비례)
-    const seg5 = this.segments[5];
-    const tailBaseAngle = seg5.angle;
+    const circleRadius = 10 * sizeScale;  // 몸통 크기 증가 (8.4→10)
+    const tailSeg = this.segments[this.segmentCount - 1];
+    const tailBaseAngle = tailSeg.angle;
 
     // 꼬리를 머리 쪽으로 이동 (크기에 비례)
     const tailOffset = 7 * sizeScale;
-    const hingeX = seg5.b.x - Math.cos(tailBaseAngle) * tailOffset;
-    const hingeY = seg5.b.y - Math.sin(tailBaseAngle) * tailOffset;
+    const hingeX = tailSeg.b.x - Math.cos(tailBaseAngle) * tailOffset;
+    const hingeY = tailSeg.b.y - Math.sin(tailBaseAngle) * tailOffset;
 
     // 꼬리 설정 (크기에 비례)
     const tailLength = 25 * sizeScale;
@@ -256,30 +309,24 @@ export class Fish {
     };
 
     // 세그먼트 중심점들 계산 (몸통)
+    // 유선형 잉어 프로파일: 머리 끝은 좁고, 중간이 가장 불룩, 꼬리로 가늘어짐
+    const lastIdx = this.segmentCount - 1;
     const bodyPoints = [];
-    for (let i = 5; i >= 0; i--) {
+    for (let i = lastIdx; i >= 0; i--) {
       const seg = this.segments[i];
       const midX = (seg.a.x + seg.b.x) / 2;
       const midY = (seg.a.y + seg.b.y) / 2;
       const angle = seg.angle;
-      // 잉어처럼 중간이 불룩한 형태
-      let thickness;
-      if (i >= 3) {
-        // 꼬리 쪽: 점점 가늘어짐
-        thickness = circleRadius * (0.4 + (5 - i) * 0.25);
-      } else {
-        // 머리 쪽: 점점 두꺼워짐
-        thickness = circleRadius * (1.15 + (3 - i) * 0.15);
-      }
+      const thickness = circleRadius * KOI_PROFILE[lastIdx - i];
       bodyPoints.push({ x: midX, y: midY, angle, thickness });
     }
 
-    // 머리 추가
+    // 머리 끝: 유선형으로 좁게 마무리
     bodyPoints.push({
       x: this.position.x,
       y: this.position.y,
       angle: this.segments[0].angle,
-      thickness: circleRadius * 1.4
+      thickness: circleRadius * 0.65
     });
 
     // 윤곽선 점들 계산 - 스플라인 보간으로 부드럽게
@@ -296,35 +343,7 @@ export class Fish {
       rawLowerPoints.push({ x: lowerX, y: lowerY });
     }
 
-    // Catmull-Rom 스플라인 보간으로 부드러운 윤곽선 생성
-    const interpolateSpline = (pts: {x: number, y: number}[], subdivisions: number) => {
-      const result: {x: number, y: number}[] = [];
-      for (let i = 0; i < pts.length - 1; i++) {
-        const p0 = pts[Math.max(i - 1, 0)];
-        const p1 = pts[i];
-        const p2 = pts[i + 1];
-        const p3 = pts[Math.min(i + 2, pts.length - 1)];
-        for (let t = 0; t < subdivisions; t++) {
-          const f = t / subdivisions;
-          const f2 = f * f;
-          const f3 = f2 * f;
-          const x = 0.5 * ((2 * p1.x) +
-            (-p0.x + p2.x) * f +
-            (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * f2 +
-            (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * f3);
-          const y = 0.5 * ((2 * p1.y) +
-            (-p0.y + p2.y) * f +
-            (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * f2 +
-            (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * f3);
-          result.push({ x, y });
-        }
-      }
-      // 마지막 점 추가
-      result.push(pts[pts.length - 1]);
-      return result;
-    };
-
-    const subdivs = 5; // 각 세그먼트를 5등분 → 7개 점이 31개로
+    const subdivs = 4; // 보간 증가 (3→4, 더 부드러운 윤곽)
     const upperPoints = interpolateSpline(rawUpperPoints, subdivs);
     const lowerPoints = interpolateSpline(rawLowerPoints, subdivs);
 
@@ -335,23 +354,32 @@ export class Fish {
 
     const ctx = p.drawingContext as CanvasRenderingContext2D;
 
-    // 농담(濃淡) 효과 - 고정 ratio 연속 스트라이프 (세그먼트 경계 없음)
-    const stripeSpacing = 0.3 * sizeScale;
+    // 농담(濃淡) 효과 - 고정 ratio 연속 스트라이프
+    const stripeSpacing = 0.5 * sizeScale; // 간격 증가 (0.3→0.5)
     const baseThickness = 8 * sizeScale;
     let noiseVal = this.swimOffset * 0.1;
 
-    ctx.lineCap = "round";
-
     // 가장 넓은 폭 기준으로 글로벌 줄 수 결정
-    let maxWidth = 0;
+    let maxWidthSq = 0;
     for (let i = 0; i < upperPoints.length; i++) {
-      const w = Math.sqrt(
-        (upperPoints[i].x - lowerPoints[i].x) ** 2 +
-        (upperPoints[i].y - lowerPoints[i].y) ** 2
-      );
-      if (w > maxWidth) maxWidth = w;
+      const dx = upperPoints[i].x - lowerPoints[i].x;
+      const dy = upperPoints[i].y - lowerPoints[i].y;
+      const wSq = dx * dx + dy * dy;
+      if (wSq > maxWidthSq) maxWidthSq = wSq;
     }
+    const maxWidth = Math.sqrt(maxWidthSq);
     const globalStripes = Math.max(Math.floor(maxWidth / stripeSpacing), 2);
+
+    // 폭 캐시: upperPoints/lowerPoints 간 거리를 미리 계산
+    const widths = new Float32Array(upperPoints.length);
+    for (let i = 0; i < upperPoints.length; i++) {
+      const dx = upperPoints[i].x - lowerPoints[i].x;
+      const dy = upperPoints[i].y - lowerPoints[i].y;
+      widths[i] = Math.sqrt(dx * dx + dy * dy);
+    }
+
+    const invMaxWidth = maxWidth > 0 ? 1 / maxWidth : 1;
+    const step = 2.5 * sizeScale; // 스텝 증가 (1.5→2.5)
 
     // 각 스트라이프를 모든 세그먼트에 걸쳐 연속으로 그림
     for (let s = 0; s < globalStripes; s++) {
@@ -361,117 +389,108 @@ export class Fish {
       // 폭 방향 그라데이션
       const widthCenter = 1 - Math.abs(ratio - 0.5) * 2;
       const alpha = 0.015 + widthCenter * widthCenter * 0.02;
-      ctx.strokeStyle = `rgba(30, 25, 20, ${alpha})`;
+      ctx.fillStyle = `rgba(30, 25, 20, ${alpha})`;
 
       for (let i = 0; i < upperPoints.length - 1; i++) {
-        // 이 세그먼트의 로컬 폭 체크 - ratio가 범위 밖이면 스킵
-        const w1 = Math.sqrt(
-          (upperPoints[i].x - lowerPoints[i].x) ** 2 +
-          (upperPoints[i].y - lowerPoints[i].y) ** 2
-        );
-        const w2 = Math.sqrt(
-          (upperPoints[i + 1].x - lowerPoints[i + 1].x) ** 2 +
-          (upperPoints[i + 1].y - lowerPoints[i + 1].y) ** 2
-        );
-        const localRatioLimit1 = maxWidth > 0 ? w1 / maxWidth : 1;
-        const localRatioLimit2 = maxWidth > 0 ? w2 / maxWidth : 1;
-        const margin = (1 - Math.min(localRatioLimit1, localRatioLimit2)) / 2;
+        const localRatioLimit1 = widths[i] * invMaxWidth;
+        const localRatioLimit2 = widths[i + 1] * invMaxWidth;
+        const margin = (1 - Math.min(localRatioLimit1, localRatioLimit2)) * 0.5;
 
-        // 이 줄이 현재 세그먼트의 폭을 넘으면 스킵
         if (ratio < margin || ratio > 1 - margin) continue;
 
-        const x1 = p.lerp(upperPoints[i].x, lowerPoints[i].x, ratio);
-        const y1 = p.lerp(upperPoints[i].y, lowerPoints[i].y, ratio);
-        const x2 = p.lerp(upperPoints[i + 1].x, lowerPoints[i + 1].x, ratio);
-        const y2 = p.lerp(upperPoints[i + 1].y, lowerPoints[i + 1].y, ratio);
+        const ux1 = upperPoints[i].x, uy1 = upperPoints[i].y;
+        const lx1 = lowerPoints[i].x, ly1 = lowerPoints[i].y;
+        const ux2 = upperPoints[i + 1].x, uy2 = upperPoints[i + 1].y;
+        const lx2 = lowerPoints[i + 1].x, ly2 = lowerPoints[i + 1].y;
 
-        const segDist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-        const step = 1.5 * sizeScale;
-        const steps = Math.max(Math.floor(segDist / step), 2);
+        const x1 = ux1 + (lx1 - ux1) * ratio;
+        const y1 = uy1 + (ly1 - uy1) * ratio;
+        const x2 = ux2 + (lx2 - ux2) * ratio;
+        const y2 = uy2 + (ly2 - uy2) * ratio;
+
+        const sdx = x2 - x1, sdy = y2 - y1;
+        const segDist = Math.sqrt(sdx * sdx + sdy * sdy);
+        const steps = Math.max(Math.floor(segDist / step), 1);
+        const invSteps = 1 / steps;
 
         for (let t = 0; t <= steps; t++) {
-          const frac = t / steps;
-          const x = p.lerp(x1, x2, frac);
-          const y = p.lerp(y1, y2, frac);
+          const frac = t * invSteps;
+          const x = x1 + sdx * frac;
+          const y = y1 + sdy * frac;
 
           noiseVal += 0.02;
-          const w = p.noise(noiseVal) * baseThickness;
+          const w = fastNoise(noiseVal) * baseThickness;
 
-          ctx.lineWidth = w;
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, y);
-          ctx.stroke();
+          const half = w * 0.5;
+          ctx.fillRect(x - half, y - half, w, w);
         }
       }
     }
 
-    // === 꼬리 지느러미 - ctx 세로선 스타일 ===
-    const tailStripes = 8;
-    ctx.strokeStyle = `rgba(30, 25, 20, 0.05)`;
+    // === 꼬리 지느러미 ===
+    const tailStripes = 6; // 줄 수 감소 (8→6)
+    ctx.fillStyle = `rgba(30, 25, 20, 0.05)`;
     const tailThickness = 4 * sizeScale;
+    const tailStep = 2.5 * sizeScale;
 
     for (let s = 0; s < tailStripes; s++) {
       const ratio = (s + 0.5) / tailStripes;
-      // hinge에서 upper/lower tip 사이를 ratio로 보간한 끝점
-      const tipX = p.lerp(upperTailTip.x, lowerTailTip.x, ratio);
-      const tipY = p.lerp(upperTailTip.y, lowerTailTip.y, ratio);
+      const tipX = upperTailTip.x + (lowerTailTip.x - upperTailTip.x) * ratio;
+      const tipY = upperTailTip.y + (lowerTailTip.y - upperTailTip.y) * ratio;
 
-      const segDist = Math.sqrt((tipX - hingeX) ** 2 + (tipY - hingeY) ** 2);
-      const step = 1.5 * sizeScale;
-      const steps = Math.max(Math.floor(segDist / step), 2);
+      const tdx = tipX - hingeX, tdy = tipY - hingeY;
+      const segDist = Math.sqrt(tdx * tdx + tdy * tdy);
+      const steps = Math.max(Math.floor(segDist / tailStep), 1);
+      const invSteps = 1 / steps;
 
       for (let t = 0; t <= steps; t++) {
-        const frac = t / steps;
-        const x = p.lerp(hingeX, tipX, frac);
-        const y = p.lerp(hingeY, tipY, frac);
+        const frac = t * invSteps;
+        const x = hingeX + tdx * frac;
+        const y = hingeY + tdy * frac;
         noiseVal += 0.02;
-        ctx.lineWidth = p.noise(noiseVal) * tailThickness;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, y);
-        ctx.stroke();
+        const w = fastNoise(noiseVal) * tailThickness;
+        const half = w * 0.5;
+        ctx.fillRect(x - half, y - half, w, w);
       }
     }
 
-    // === 지느러미 - ctx 세로선 스타일 ===
-    const finFlapSpeed = 1;
-    const finFlapAmount = 0.5;
-    const finFlap = Math.sin(this.swimOffset * finFlapSpeed) * finFlapAmount;
+    // === 지느러미 ===
+    const finFlap = Math.sin(this.swimOffset) * 0.5;
     const finThickness = 3 * sizeScale;
     const finLength = 22 * sizeScale;
-    const finStripes = 5;
-    ctx.strokeStyle = `rgba(30, 25, 20, 0.04)`;
+    const finStripes = 4; // 줄 수 감소 (5→4)
+    ctx.fillStyle = `rgba(30, 25, 20, 0.04)`;
+    const finStep = 3 * sizeScale; // 스텝 증가
 
     // 가슴지느러미 헬퍼
     const drawFin = (baseX: number, baseY: number, angle: number, length: number, stripes: number) => {
       for (let s = 0; s < stripes; s++) {
-        const spread = ((s - (stripes - 1) / 2) / stripes) * 0.4; // 부채꼴 펼침
+        const spread = ((s - (stripes - 1) / 2) / stripes) * 0.4;
         const finAngle = angle + spread;
-        const tipX = baseX + Math.cos(finAngle) * length;
-        const tipY = baseY + Math.sin(finAngle) * length;
+        const cosA = Math.cos(finAngle), sinA = Math.sin(finAngle);
+        const tipX = baseX + cosA * length;
+        const tipY = baseY + sinA * length;
 
-        const segDist = Math.sqrt((tipX - baseX) ** 2 + (tipY - baseY) ** 2);
-        const step = 1.5 * sizeScale;
-        const steps = Math.max(Math.floor(segDist / step), 2);
+        const fdx = tipX - baseX, fdy = tipY - baseY;
+        const segDist = Math.sqrt(fdx * fdx + fdy * fdy);
+        const steps = Math.max(Math.floor(segDist / finStep), 1);
+        const invSteps = 1 / steps;
 
         for (let t = 0; t <= steps; t++) {
-          const frac = t / steps;
-          const x = p.lerp(baseX, tipX, frac);
-          const y = p.lerp(baseY, tipY, frac);
+          const frac = t * invSteps;
+          const x = baseX + fdx * frac;
+          const y = baseY + fdy * frac;
           noiseVal += 0.02;
-          ctx.lineWidth = p.noise(noiseVal) * finThickness * (1 - frac * 0.5); // 끝으로 갈수록 가늘어짐
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, y);
-          ctx.stroke();
+          const w = fastNoise(noiseVal) * finThickness * (1 - frac * 0.5);
+          const half = w * 0.5;
+          ctx.fillRect(x - half, y - half, w, w);
         }
       }
     };
 
-    // 가슴지느러미
-    const pectoralIdx = 3;
-    const pectoralAngle = bodyPoints[pectoralIdx]?.angle || this.segments[2].angle;
+    // 가슴지느러미 (가장 넓은 부근)
+    const pectoralIdx = 5;
+    const pectoralAngle = bodyPoints[pectoralIdx]?.angle || this.segments[3].angle;
 
     if (upperPoints[pectoralIdx]) {
       drawFin(upperPoints[pectoralIdx].x, upperPoints[pectoralIdx].y,
@@ -482,10 +501,10 @@ export class Fish {
         pectoralAngle + p.HALF_PI + finFlap, finLength, finStripes);
     }
 
-    // 배지느러미
-    const ventralIdx = 1;
-    const ventralAngle = bodyPoints[ventralIdx]?.angle || this.segments[4].angle;
-    const ventralFlap = Math.sin(this.swimOffset * finFlapSpeed + Math.PI * 0.5) * finFlapAmount * 0.7;
+    // 배지느러미 (꼬리 쪽)
+    const ventralIdx = 2;
+    const ventralAngle = bodyPoints[ventralIdx]?.angle || this.segments[5].angle;
+    const ventralFlap = Math.sin(this.swimOffset + Math.PI * 0.5) * 0.35;
     const ventralLength = 14 * sizeScale;
 
     if (upperPoints[ventralIdx]) {
@@ -498,7 +517,7 @@ export class Fish {
     }
 
     // 눈
-    const eyeOffset = circleRadius * 0.8;
+    const eyeOffset = circleRadius * 0.55;
     const eyeRX = this.position.x + Math.cos(headAngle + p.HALF_PI) * eyeOffset;
     const eyeRY = this.position.y + Math.sin(headAngle + p.HALF_PI) * eyeOffset;
     const eyeLX = this.position.x + Math.cos(headAngle - p.HALF_PI) * eyeOffset;
@@ -510,8 +529,8 @@ export class Fish {
     p.circle(eyeLX, eyeLY, 4 * sizeScale);
 
     // 수염
-    const barbelBaseX = this.position.x + Math.cos(headAngle) * circleRadius * 1.3;
-    const barbelBaseY = this.position.y + Math.sin(headAngle) * circleRadius * 1.3;
+    const barbelBaseX = this.position.x + Math.cos(headAngle) * circleRadius * 0.9;
+    const barbelBaseY = this.position.y + Math.sin(headAngle) * circleRadius * 0.9;
 
     p.stroke(30, 25, 20, 40);
     p.strokeWeight(1 * sizeScale);
