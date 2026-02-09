@@ -1,14 +1,20 @@
 import "./types/p5.brush.d.ts";
 import { Fish } from "./agent/Fish";
 import { Physics } from "./world/Physics";
+import { isMobile, DESKTOP_QUALITY, MOBILE_QUALITY } from "./types/QualitySettings";
+import type { QualitySettings } from "./types/QualitySettings";
 import p5 from "p5";
 
 const sketch = (p: p5) => {
   let fishes: Fish[] = [];
   let physics: Physics;
   let time = 0;
-  const FISH_COUNT = 8; // 여러 마리 표시
+  const quality: QualitySettings = isMobile() ? MOBILE_QUALITY : DESKTOP_QUALITY;
   let paperTexture: p5.Graphics; // 한지 질감 레이어
+  let trailLayer: p5.Graphics;  // 잔상(먹 번짐) 버퍼
+
+  // FPS DOM 엘리먼트
+  let fpsDiv: HTMLDivElement;
 
   // p5를 전역에 설정 (Fish 클래스가 사용할 수 있도록)
   (window as any).p5Instance = p;
@@ -17,11 +23,16 @@ const sketch = (p: p5) => {
     const canvas = p.createCanvas(p.windowWidth, p.windowHeight);
     canvas.parent("app");
 
+    // 모바일 프레임 레이트 제한
+    if (quality.frameRate > 0) {
+      p.frameRate(quality.frameRate);
+    }
+
     // Physics 초기화
     physics = new Physics(p.width, p.height);
 
     // 물고기 생성 (화면 전체에 랜덤 배치)
-    for (let i = 0; i < FISH_COUNT; i++) {
+    for (let i = 0; i < quality.fishCount; i++) {
       const x = p.random(100, p.width - 100);
       const y = p.random(100, p.height - 100);
       fishes.push(new Fish(x, y));
@@ -30,12 +41,19 @@ const sketch = (p: p5) => {
     // 배경 설정 (한지 느낌)
     p.background(255, 255, 255);
 
-    // 한지 질감 생성 후 캔버스에 한 번만 그리기
+    // 한지 질감 생성
     createPaperTexture();
     p.image(paperTexture, 0, 0);
 
-    // 자동 루프 활성화 (마우스 따라가기)
-    // p.noLoop();
+    // 잔상 레이어 생성 (투명 버퍼)
+    trailLayer = p.createGraphics(p.width, p.height);
+    trailLayer.clear();
+
+    // FPS DOM 엘리먼트 생성
+    fpsDiv = document.createElement("div");
+    fpsDiv.style.cssText =
+      "position:fixed;top:10px;left:10px;font:12px monospace;color:rgba(0,0,0,0.6);pointer-events:none;z-index:1000;";
+    document.body.appendChild(fpsDiv);
   };
 
   // 한지 질감 생성 함수 (최적화 버전)
@@ -99,19 +117,24 @@ const sketch = (p: p5) => {
   };
 
   p.draw = () => {
-    // 반투명 레이어로 잔상 효과 (먹이 번지는 느낌)
-    p.fill(250, 247, 240, 20);
-    p.noStroke();
-    p.rect(0, 0, p.width, p.height);
-
     // 시간 업데이트
     time += 0.01;
 
-    // 물고기 업데이트 및 렌더링
+    // 1) 잔상 레이어 페이드: 반투명 흰색으로 이전 프레임 흔적을 서서히 지움
+    const tCtx = trailLayer.drawingContext as CanvasRenderingContext2D;
+    tCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    tCtx.fillRect(0, 0, p.width, p.height);
+
+    // 2) 물고기를 잔상 레이어에 그림
     for (const fish of fishes) {
       fish.update(physics, time);
-      fish.display();
+      fish.display(quality, trailLayer);
     }
+
+    // 3) 메인 캔버스: 깨끗한 배경 + 한지 질감 + 잔상 레이어 합성
+    p.background(255);
+    p.image(paperTexture, 0, 0);
+    p.image(trailLayer, 0, 0);
 
     // FPS 표시 (개발용)
     displayInfo();
@@ -120,21 +143,18 @@ const sketch = (p: p5) => {
   p.windowResized = () => {
     p.resizeCanvas(p.windowWidth, p.windowHeight);
     physics.updateDimensions(p.width, p.height);
-    createPaperTexture(); // 화면 크기 변경 시 질감 다시 생성
+    createPaperTexture();
+    trailLayer.remove();
+    trailLayer = p.createGraphics(p.width, p.height);
+    trailLayer.clear();
   };
 
   const displayInfo = (): void => {
-    // 매 10프레임마다만 FPS 텍스트 갱신 (텍스트 렌더링 부하 감소)
-    if (p.frameCount % 10 === 0) {
-      (displayInfo as any)._fps = p.frameRate().toFixed(0);
+    // 매 10프레임마다만 FPS 텍스트 갱신
+    if (p.frameCount % 10 === 0 && fpsDiv) {
+      const fps = p.frameRate().toFixed(0);
+      fpsDiv.textContent = `FPS: ${fps} | 물고기: ${fishes.length} | 클릭하여 물고기 추가`;
     }
-    p.fill(0, 150);
-    p.noStroke();
-    p.textSize(12);
-    p.textAlign(p.LEFT, p.TOP);
-    p.text(`FPS: ${(displayInfo as any)._fps || "—"}`, 10, 10);
-    p.text(`물고기: ${fishes.length}`, 10, 25);
-    p.text(`클릭하여 물고기 추가`, 10, 40);
   };
 
   p.mousePressed = () => {
@@ -158,19 +178,18 @@ const sketch = (p: p5) => {
     // 'R' 키: 리셋
     if (p.key === "r" || p.key === "R") {
       fishes = [];
-      for (let i = 0; i < FISH_COUNT; i++) {
+      for (let i = 0; i < quality.fishCount; i++) {
         const x = p.random(p.width);
         const y = p.random(p.height);
         fishes.push(new Fish(x, y));
       }
-      p.background(250, 247, 240);
-      createPaperTexture(); // 질감 다시 생성
+      createPaperTexture();
+      trailLayer.clear();
     }
 
     // 스페이스바: 배경 지우기
     if (p.key === " ") {
-      p.background(250, 247, 240);
-      createPaperTexture(); // 질감 다시 생성
+      trailLayer.clear();
     }
   };
 };

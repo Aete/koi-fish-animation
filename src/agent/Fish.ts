@@ -1,5 +1,6 @@
 import { Physics } from '../world/Physics';
 import { Segment } from './Segment';
+import type { QualitySettings } from '../types/QualitySettings';
 import type p5 from 'p5';
 
 // 유선형 잉어 프로파일 (seg5→seg0 순서) - 매 프레임 재생성 방지
@@ -307,8 +308,10 @@ export class Fish {
   /**
    * 물고기 렌더링 (유선형 잉어 스타일)
    */
-  display(): void {
+  display(quality: QualitySettings, renderer?: p5.Graphics): void {
     const p = (window as any).p5Instance;
+    // renderer가 주어지면 해당 버퍼에 그림, 아니면 메인 캔버스에 직접 그림
+    const r: p5 | p5.Graphics = renderer || p;
 
     // 크기 스케일 (기준 크기 120 대비)
     const sizeScale = this.size / 120;
@@ -365,17 +368,18 @@ export class Fish {
     const rawUpperPoints = [];
     const rawLowerPoints = [];
 
+    const HALF_PI = Math.PI / 2;
     for (let i = 0; i < bodyPoints.length; i++) {
       const pt = bodyPoints[i];
-      const upperX = pt.x + Math.cos(pt.angle + p.HALF_PI) * pt.thickness;
-      const upperY = pt.y + Math.sin(pt.angle + p.HALF_PI) * pt.thickness;
-      const lowerX = pt.x + Math.cos(pt.angle - p.HALF_PI) * pt.thickness;
-      const lowerY = pt.y + Math.sin(pt.angle - p.HALF_PI) * pt.thickness;
+      const upperX = pt.x + Math.cos(pt.angle + HALF_PI) * pt.thickness;
+      const upperY = pt.y + Math.sin(pt.angle + HALF_PI) * pt.thickness;
+      const lowerX = pt.x + Math.cos(pt.angle - HALF_PI) * pt.thickness;
+      const lowerY = pt.y + Math.sin(pt.angle - HALF_PI) * pt.thickness;
       rawUpperPoints.push({ x: upperX, y: upperY });
       rawLowerPoints.push({ x: lowerX, y: lowerY });
     }
 
-    const subdivs = 4; // 보간 증가 (3→4, 더 부드러운 윤곽)
+    const subdivs = quality.subdivisions;
     const upperPoints = interpolateSpline(rawUpperPoints, subdivs);
     const lowerPoints = interpolateSpline(rawLowerPoints, subdivs);
 
@@ -384,10 +388,10 @@ export class Fish {
 
     // 몸통 채우기 제거 - ctx 스트라이프가 몸통 형태를 만듦
 
-    const ctx = p.drawingContext as CanvasRenderingContext2D;
+    const ctx = (r as any).drawingContext as CanvasRenderingContext2D;
 
     // 농담(濃淡) 효과 - 고정 ratio 연속 스트라이프
-    const stripeSpacing = 0.3 * sizeScale;
+    const stripeSpacing = 0.3 * sizeScale * quality.stripeSpacing;
     const baseThickness = 4 * sizeScale;
     let noiseVal = this.noiseSeed;
 
@@ -411,7 +415,7 @@ export class Fish {
     }
 
     const invMaxWidth = maxWidth > 0 ? 1 / maxWidth : 1;
-    const step = 1.2 * sizeScale;
+    const step = 1.2 * sizeScale * quality.stepSize;
 
     // 각 스트라이프를 모든 세그먼트에 걸쳐 연속으로 그림
     for (let s = 0; s < globalStripes; s++) {
@@ -483,7 +487,7 @@ export class Fish {
       const spotRadius = localWidth * spot.size;
 
       // 주황색 점을 부드럽게 여러 겹으로 렌더링
-      const spotSteps = Math.max(Math.floor(spotRadius / (0.8 * sizeScale)), 4);
+      const spotSteps = Math.max(Math.floor(spotRadius / (0.8 * sizeScale * quality.spotStep)), 4);
       for (let si = 0; si < spotSteps; si++) {
         for (let sj = 0; sj < spotSteps; sj++) {
           const sx = cx + (si / spotSteps - 0.5) * spotRadius * 2;
@@ -577,11 +581,11 @@ export class Fish {
 
     if (upperPoints[pectoralIdx]) {
       drawFin(upperPoints[pectoralIdx].x, upperPoints[pectoralIdx].y,
-        pectoralAngle - p.HALF_PI - finFlap, finLength, finStripes);
+        pectoralAngle - HALF_PI - finFlap, finLength, finStripes);
     }
     if (lowerPoints[pectoralIdx]) {
       drawFin(lowerPoints[pectoralIdx].x, lowerPoints[pectoralIdx].y,
-        pectoralAngle + p.HALF_PI + finFlap, finLength, finStripes);
+        pectoralAngle + HALF_PI + finFlap, finLength, finStripes);
     }
 
     // 배지느러미 (꼬리 쪽)
@@ -592,39 +596,39 @@ export class Fish {
 
     if (upperPoints[ventralIdx]) {
       drawFin(upperPoints[ventralIdx].x, upperPoints[ventralIdx].y,
-        ventralAngle - p.HALF_PI - ventralFlap, ventralLength, 3);
+        ventralAngle - HALF_PI - ventralFlap, ventralLength, 3);
     }
     if (lowerPoints[ventralIdx]) {
       drawFin(lowerPoints[ventralIdx].x, lowerPoints[ventralIdx].y,
-        ventralAngle + p.HALF_PI + ventralFlap, ventralLength, 3);
+        ventralAngle + HALF_PI + ventralFlap, ventralLength, 3);
     }
 
     // 수염
     const barbelBaseX = this.position.x + Math.cos(headAngle) * circleRadius * 0.9;
     const barbelBaseY = this.position.y + Math.sin(headAngle) * circleRadius * 0.9;
 
-    p.stroke(30, 25, 20, 40);
-    p.strokeWeight(1 * sizeScale);
-    p.noFill();
+    r.stroke(30, 25, 20, 40);
+    r.strokeWeight(1 * sizeScale);
+    r.noFill();
 
-    p.beginShape();
-    p.vertex(barbelBaseX, barbelBaseY);
-    p.quadraticVertex(
+    r.beginShape();
+    r.vertex(barbelBaseX, barbelBaseY);
+    r.quadraticVertex(
       barbelBaseX + Math.cos(headAngle + 0.4) * 10 * sizeScale,
       barbelBaseY + Math.sin(headAngle + 0.4) * 10 * sizeScale,
       barbelBaseX + Math.cos(headAngle + 0.6) * 15 * sizeScale,
       barbelBaseY + Math.sin(headAngle + 0.6) * 15 * sizeScale
     );
-    p.endShape();
+    r.endShape();
 
-    p.beginShape();
-    p.vertex(barbelBaseX, barbelBaseY);
-    p.quadraticVertex(
+    r.beginShape();
+    r.vertex(barbelBaseX, barbelBaseY);
+    r.quadraticVertex(
       barbelBaseX + Math.cos(headAngle - 0.4) * 10 * sizeScale,
       barbelBaseY + Math.sin(headAngle - 0.4) * 10 * sizeScale,
       barbelBaseX + Math.cos(headAngle - 0.6) * 15 * sizeScale,
       barbelBaseY + Math.sin(headAngle - 0.6) * 15 * sizeScale
     );
-    p.endShape();
+    r.endShape();
   }
 }
