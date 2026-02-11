@@ -1,6 +1,11 @@
 import { Physics } from '../world/Physics';
 import { Segment } from './Segment';
 import type { QualitySettings } from '../types/QualitySettings';
+import {
+  FIN_INK_ALPHA, FIN_ACCENT_ALPHA, FIN_LENGTH, FIN_WIDTH, FIN_ROUNDNESS,
+  FIN_OSC_SPEED, FIN_OSC_AMPLITUDE, FIN_PHASE_OFFSET,
+  PECTORAL_POSITION, FIN_BASE_ANGLE,
+} from '../gui/FinParams';
 import type p5 from 'p5';
 
 // 유선형 잉어 프로파일 (seg5→seg0 순서) - 매 프레임 재생성 방지
@@ -541,66 +546,161 @@ export class Fish {
       }
     }
 
-    // === 지느러미 ===
-    const finFlap = Math.sin(this.swimOffset) * 0.5;
+    // === 지느러미 (둥근 삼각형 스타일) ===
+    const finBaseAngleRad = (FIN_BASE_ANGLE * Math.PI) / 180;
+    const finOscAmpRad = (FIN_OSC_AMPLITUDE * Math.PI) / 180;
+
+    // 물고기 자체 accentRGB 색상 사용
+    const fcR = this.accentRGB[0];
+    const fcG = this.accentRGB[1];
+    const fcB = this.accentRGB[2];
+
+    // 삼각 진동 (삼각함수로 일정 각도 회전 반복)
+    const finOscUpper = Math.sin(this.swimOffset * FIN_OSC_SPEED) * finOscAmpRad;
+    const finOscLower = Math.sin(this.swimOffset * FIN_OSC_SPEED + FIN_PHASE_OFFSET) * finOscAmpRad;
+
+    const finLength = 22 * sizeScale * FIN_LENGTH;
+    const finWidth = 12 * sizeScale * FIN_WIDTH;
     const finThickness = 2 * sizeScale;
-    const finLength = 22 * sizeScale;
-    const finStripes = 5;
-    ctx.fillStyle = `rgba(30, 25, 20, 0.04)`;
-    const finStep = 3 * sizeScale;
+    const finStep = 1.5 * sizeScale;
 
-    // 가슴지느러미 헬퍼
-    const drawFin = (baseX: number, baseY: number, angle: number, length: number, stripes: number) => {
+    /**
+     * 둥근 삼각형 지느러미 그리기
+     * base에서 tip 방향으로 삼각형, 꼭지점 둥글게 처리
+     */
+    const drawRoundedTriangleFin = (
+      baseX: number, baseY: number,
+      angle: number, length: number, width: number,
+      isAccented: boolean
+    ) => {
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.rotate(angle);
+
+      // 삼각형 꼭지점: base 좌우 + tip
+      const tipX = length;
+      const tipY = 0;
+      const baseTopX = 0;
+      const baseTopY = -width / 2;
+      const baseBotX = 0;
+      const baseBotY = width / 2;
+
+      // 둥글기 반경 (FIN_ROUNDNESS 0~1)
+      const cornerR = FIN_ROUNDNESS * Math.min(width * 0.4, length * 0.2);
+
+      // 수묵화 스타일: 여러 번 얇게 채움
+      const passes = 8;
+      for (let pass = 0; pass < passes; pass++) {
+        const shrink = pass * 0.3;
+        const alpha = FIN_INK_ALPHA * (1 - pass * 0.08);
+        if (alpha <= 0) break;
+
+        ctx.beginPath();
+        // 둥근 삼각형 path
+        const sx = baseTopX + shrink;
+        const sy = baseTopY + shrink;
+        const ex = baseBotX + shrink;
+        const ey = baseBotY - shrink;
+        const tx = tipX - shrink * 2;
+        const ty = tipY;
+
+        if (cornerR > 0.5) {
+          // arcTo로 둥근 꼭지점
+          ctx.moveTo(sx + cornerR, sy);
+          ctx.arcTo(tx, ty, ex, ey, cornerR * 1.5); // tip 꼭지점
+          ctx.arcTo(ex, ey, sx, sy, cornerR * 0.8);  // bottom 꼭지점
+          ctx.arcTo(sx, sy, tx, ty, cornerR * 0.8);  // top 꼭지점
+        } else {
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(tx, ty);
+          ctx.lineTo(ex, ey);
+        }
+        ctx.closePath();
+
+        ctx.fillStyle = `rgba(30, 25, 20, ${alpha})`;
+        ctx.fill();
+      }
+
+      // 액센트 색상 레이어
+      if (isAccented) {
+        for (let pass = 0; pass < 5; pass++) {
+          const shrink = pass * 0.8 + 1;
+          const alpha = FIN_ACCENT_ALPHA * (1 - pass * 0.12);
+          if (alpha <= 0) break;
+
+          ctx.beginPath();
+          const sx = baseTopX + shrink;
+          const sy = baseTopY + shrink * 0.8;
+          const ex = baseBotX + shrink;
+          const ey = baseBotY - shrink * 0.8;
+          const tx = tipX - shrink * 2.5;
+          const ty = tipY;
+
+          if (cornerR > 0.5) {
+            ctx.moveTo(sx + cornerR, sy);
+            ctx.arcTo(tx, ty, ex, ey, cornerR * 1.2);
+            ctx.arcTo(ex, ey, sx, sy, cornerR * 0.6);
+            ctx.arcTo(sx, sy, tx, ty, cornerR * 0.6);
+          } else {
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx, ty);
+            ctx.lineTo(ex, ey);
+          }
+          ctx.closePath();
+
+          ctx.fillStyle = `rgba(${fcR}, ${fcG}, ${fcB}, ${alpha})`;
+          ctx.fill();
+        }
+      }
+
+      // 수묵 입자 스트라이프 (기존 질감 유지)
+      const stripes = 5;
       for (let s = 0; s < stripes; s++) {
-        const spread = ((s - (stripes - 1) / 2) / stripes) * 0.4;
-        const finAngle = angle + spread;
-        const cosA = Math.cos(finAngle), sinA = Math.sin(finAngle);
-        const tipX = baseX + cosA * length;
-        const tipY = baseY + sinA * length;
+        const ratio = (s + 0.5) / stripes;
+        const startY = (-width / 2 + width * ratio);
+        const endX = length * (1 - Math.abs(ratio - 0.5) * 0.8);
 
-        const fdx = tipX - baseX, fdy = tipY - baseY;
+        const fdx = endX;
+        const fdy = startY * (1 - endX / length);
         const segDist = Math.sqrt(fdx * fdx + fdy * fdy);
         const steps = Math.max(Math.floor(segDist / finStep), 1);
         const invSteps = 1 / steps;
 
         for (let t = 0; t <= steps; t++) {
           const frac = t * invSteps;
-          const x = baseX + fdx * frac;
-          const y = baseY + fdy * frac;
+          const x = fdx * frac;
+          const y = startY * (1 - frac);
           noiseVal += 0.02;
           const w = fastNoise(noiseVal) * finThickness * (1 - frac * 0.5);
           const half = w * 0.5;
+          ctx.fillStyle = `rgba(30, 25, 20, ${FIN_INK_ALPHA * 0.6})`;
           ctx.fillRect(x - half, y - half, w, w);
         }
       }
+
+      ctx.restore();
     };
 
-    // 가슴지느러미 (가장 넓은 부근)
-    const pectoralIdx = 5;
-    const pectoralAngle = bodyPoints[pectoralIdx]?.angle || this.segments[3].angle;
+    // 가슴지느러미 (위치 파라미터 기반)
+    const maxBodyIdx = bodyPoints.length - 1;
+    const pectoralBodyIdx = Math.round(PECTORAL_POSITION * maxBodyIdx);
+    const pectoralSplineIdx = Math.round(PECTORAL_POSITION * (upperPoints.length - 1));
+    const pectoralAngle = bodyPoints[pectoralBodyIdx]?.angle || this.segments[3].angle;
+    const hasFinAccent = fastNoise(this.noiseSeed + 50) > 0.4;
 
-    if (upperPoints[pectoralIdx]) {
-      drawFin(upperPoints[pectoralIdx].x, upperPoints[pectoralIdx].y,
-        pectoralAngle - HALF_PI - finFlap, finLength, finStripes);
+    if (upperPoints[pectoralSplineIdx]) {
+      drawRoundedTriangleFin(
+        upperPoints[pectoralSplineIdx].x, upperPoints[pectoralSplineIdx].y,
+        pectoralAngle - HALF_PI - finBaseAngleRad + finOscUpper,
+        finLength, finWidth, hasFinAccent
+      );
     }
-    if (lowerPoints[pectoralIdx]) {
-      drawFin(lowerPoints[pectoralIdx].x, lowerPoints[pectoralIdx].y,
-        pectoralAngle + HALF_PI + finFlap, finLength, finStripes);
-    }
-
-    // 배지느러미 (꼬리 쪽)
-    const ventralIdx = 2;
-    const ventralAngle = bodyPoints[ventralIdx]?.angle || this.segments[5].angle;
-    const ventralFlap = Math.sin(this.swimOffset + Math.PI * 0.5) * 0.35;
-    const ventralLength = 14 * sizeScale;
-
-    if (upperPoints[ventralIdx]) {
-      drawFin(upperPoints[ventralIdx].x, upperPoints[ventralIdx].y,
-        ventralAngle - HALF_PI - ventralFlap, ventralLength, 3);
-    }
-    if (lowerPoints[ventralIdx]) {
-      drawFin(lowerPoints[ventralIdx].x, lowerPoints[ventralIdx].y,
-        ventralAngle + HALF_PI + ventralFlap, ventralLength, 3);
+    if (lowerPoints[pectoralSplineIdx]) {
+      drawRoundedTriangleFin(
+        lowerPoints[pectoralSplineIdx].x, lowerPoints[pectoralSplineIdx].y,
+        pectoralAngle + HALF_PI + finBaseAngleRad + finOscLower,
+        finLength, finWidth, hasFinAccent
+      );
     }
 
     // 수염
