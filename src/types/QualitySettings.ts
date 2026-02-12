@@ -19,9 +19,9 @@ export const DESKTOP_QUALITY: QualitySettings = {
 export const MOBILE_QUALITY: QualitySettings = {
   fishCount: 4,
   subdivisions: 2,
-  stripeSpacing: 2.0,
-  stepSize: 2.0,
-  spotStep: 2.0,
+  stripeSpacing: 1.0,
+  stepSize: 1.0,
+  spotStep: 1.0,
   frameRate: 30,
 };
 
