@@ -101,8 +101,9 @@ export class Fish {
     this.velocity.mult(p.random(0.8, 1.5));
     this.acceleration = p.createVector(0, 0);
 
-    // 크기 베리에이션 추가 (80 ~ 140)
-    this.size = p.random(210, 360);
+    // 크기 베리에이션 - 화면 크기에 비례 (기준: 최소 변 1000px)
+    const screenScale = Math.min(p.width, p.height) / 1000;
+    this.size = p.random(210, 360) * screenScale;
 
     // 크기에 따라 속도 조정 (큰 물고기는 느리고 우아하게, 작은 물고기는 빠르게)
     const sizeRatio = p.map(this.size, 173, 302, 1.15, 0.75);
@@ -192,8 +193,8 @@ export class Fish {
     const wanderForce = this.wander();
     this.applyForce(wanderForce);
 
-    // 화면 경계 처리 (부드럽게 튕김) - 벡터 재사용
-    const margin = 50;
+    // 화면 경계 처리 (부드럽게 튕김) - 벡터 재사용, 화면 크기 비례
+    const margin = Math.min(p.width, p.height) * 0.05;
     if (this.position.x < margin) {
       this._steerVec.set(this.maxForce, 0);
       this.applyForce(this._steerVec);
