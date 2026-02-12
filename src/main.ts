@@ -1,7 +1,11 @@
 import "./types/p5.brush.d.ts";
 import { Fish } from "./agent/Fish";
 import { Physics } from "./world/Physics";
-import { isMobile, DESKTOP_QUALITY, MOBILE_QUALITY } from "./types/QualitySettings";
+import {
+  isMobile,
+  DESKTOP_QUALITY,
+  MOBILE_QUALITY,
+} from "./types/QualitySettings";
 import type { QualitySettings } from "./types/QualitySettings";
 import p5 from "p5";
 
@@ -9,8 +13,10 @@ const sketch = (p: p5) => {
   let fishes: Fish[] = [];
   let physics: Physics;
   let time = 0;
-  const quality: QualitySettings = isMobile() ? MOBILE_QUALITY : DESKTOP_QUALITY;
-  let trailLayer: p5.Graphics;  // 잔상(먹 번짐) 버퍼
+  const quality: QualitySettings = isMobile()
+    ? MOBILE_QUALITY
+    : DESKTOP_QUALITY;
+  let trailLayer: p5.Graphics; // 잔상(먹 번짐) 버퍼
 
   // FPS DOM 엘리먼트
   let fpsDiv: HTMLDivElement;
@@ -19,6 +25,9 @@ const sketch = (p: p5) => {
   (window as any).p5Instance = p;
 
   p.setup = () => {
+    // 모든 기기에서 동일한 논리 픽셀 기준 렌더링 (모바일 고DPI 보정)
+    p.pixelDensity(1);
+
     const canvas = p.createCanvas(p.windowWidth, p.windowHeight);
     canvas.parent("app");
 
@@ -56,7 +65,7 @@ const sketch = (p: p5) => {
 
     // 1) 잔상 레이어 페이드: 반투명 흰색으로 이전 프레임 흔적을 서서히 지움
     const tCtx = trailLayer.drawingContext as CanvasRenderingContext2D;
-    tCtx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    tCtx.fillStyle = "rgba(255, 255, 255, 0.04)";
     tCtx.fillRect(0, 0, p.width, p.height);
 
     // 2) 물고기를 잔상 레이어에 그림
@@ -98,29 +107,6 @@ const sketch = (p: p5) => {
       p.mouseY <= p.height
     ) {
       fishes.push(new Fish(p.mouseX, p.mouseY));
-    }
-  };
-
-  p.keyPressed = () => {
-    // 'C' 키: 물고기 전체 삭제
-    if (p.key === "c" || p.key === "C") {
-      fishes = [];
-    }
-
-    // 'R' 키: 리셋
-    if (p.key === "r" || p.key === "R") {
-      fishes = [];
-      for (let i = 0; i < quality.fishCount; i++) {
-        const x = p.random(p.width);
-        const y = p.random(p.height);
-        fishes.push(new Fish(x, y));
-      }
-      trailLayer.clear();
-    }
-
-    // 스페이스바: 배경 지우기
-    if (p.key === " ") {
-      trailLayer.clear();
     }
   };
 };
