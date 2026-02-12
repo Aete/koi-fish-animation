@@ -6,6 +6,7 @@ import {
   FIN_OSC_SPEED, FIN_OSC_AMPLITUDE, FIN_PHASE_OFFSET,
   PECTORAL_POSITION, FIN_BASE_ANGLE,
 } from '../gui/FinParams';
+import type { Ripple } from '../effects/Ripple';
 import type p5 from 'p5';
 
 // 유선형 잉어 프로파일 (seg5→seg0 순서) - 매 프레임 재생성 방지
@@ -281,6 +282,19 @@ export class Fish {
   }
 
   /**
+   * 리플로부터 도망 힘 적용
+   */
+  applyScatterForce(ripples: Ripple[]): void {
+    for (const ripple of ripples) {
+      const { fx, fy } = ripple.getScatterForce(this.position.x, this.position.y);
+      if (fx !== 0 || fy !== 0) {
+        this._steerVec.set(fx, fy);
+        this.applyForce(this._steerVec);
+      }
+    }
+  }
+
+  /**
    * Wander 행동 (자율적인 배회)
    */
   wander(): p5.Vector {
@@ -313,10 +327,22 @@ export class Fish {
   /**
    * 물고기 렌더링 (유선형 잉어 스타일)
    */
-  display(quality: QualitySettings, renderer?: p5.Graphics): void {
+  display(quality: QualitySettings, renderer?: p5.Graphics, ripples?: Ripple[]): void {
     const p = (window as any).p5Instance;
     // renderer가 주어지면 해당 버퍼에 그림, 아니면 메인 캔버스에 직접 그림
     const r: p5 | p5.Graphics = renderer || p;
+
+    // 리플 왜곡 offset 헬퍼
+    const getRippleOffset = (x: number, y: number): { dx: number; dy: number } => {
+      if (!ripples || ripples.length === 0) return { dx: 0, dy: 0 };
+      let totalDx = 0, totalDy = 0;
+      for (const ripple of ripples) {
+        const d = ripple.getDisplacement(x, y);
+        totalDx += d.dx;
+        totalDy += d.dy;
+      }
+      return { dx: totalDx, dy: totalDy };
+    };
 
     // 크기 스케일 (기준 크기 120 대비)
     const sizeScale = this.size / 120;
@@ -462,8 +488,12 @@ export class Fish {
 
         for (let t = 0; t <= steps; t++) {
           const frac = t * invSteps;
-          const x = x1 + sdx * frac;
-          const y = y1 + sdy * frac;
+          let x = x1 + sdx * frac;
+          let y = y1 + sdy * frac;
+
+          // 리플 왜곡 적용
+          const off = getRippleOffset(x, y);
+          x += off.dx; y += off.dy;
 
           noiseVal += 0.02;
           const w = fastNoise(noiseVal) * baseThickness;
@@ -495,10 +525,15 @@ export class Fish {
       const spotSteps = Math.max(Math.floor(spotRadius / (0.8 * sizeScale * quality.spotStep)), 4);
       for (let si = 0; si < spotSteps; si++) {
         for (let sj = 0; sj < spotSteps; sj++) {
-          const sx = cx + (si / spotSteps - 0.5) * spotRadius * 2;
-          const sy = cy + (sj / spotSteps - 0.5) * spotRadius * 2;
+          let sx = cx + (si / spotSteps - 0.5) * spotRadius * 2;
+          let sy = cy + (sj / spotSteps - 0.5) * spotRadius * 2;
           const dist = Math.sqrt((sx - cx) * (sx - cx) + (sy - cy) * (sy - cy));
           if (dist > spotRadius) continue;
+
+          // 리플 왜곡 적용
+          const sOff = getRippleOffset(sx, sy);
+          sx += sOff.dx; sy += sOff.dy;
+
           const falloff = 1 - (dist / spotRadius);
           noiseVal += 0.01;
           const w = fastNoise(noiseVal) * baseThickness * 0.6;
@@ -529,8 +564,13 @@ export class Fish {
 
       for (let t = 0; t <= steps; t++) {
         const frac = t * invSteps;
-        const x = hingeX + tdx * frac;
-        const y = hingeY + tdy * frac;
+        let x = hingeX + tdx * frac;
+        let y = hingeY + tdy * frac;
+
+        // 리플 왜곡 적용
+        const tOff = getRippleOffset(x, y);
+        x += tOff.dx; y += tOff.dy;
+
         tailNoiseVal += 0.02;
         const w = fastNoise(tailNoiseVal) * tailThickness;
         const half = w * 0.5;

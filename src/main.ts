@@ -1,6 +1,7 @@
 import "./types/p5.brush.d.ts";
 import { Fish } from "./agent/Fish";
 import { Physics } from "./world/Physics";
+import { Ripple } from "./effects/Ripple";
 import {
   isMobile,
   DESKTOP_QUALITY,
@@ -11,6 +12,7 @@ import p5 from "p5";
 
 const sketch = (p: p5) => {
   let fishes: Fish[] = [];
+  let ripples: Ripple[] = [];
   let physics: Physics;
   let time = 0;
   const quality: QualitySettings = isMobile()
@@ -57,7 +59,8 @@ const sketch = (p: p5) => {
     fpsDiv.style.cssText =
       "position:fixed;top:10px;left:10px;font:12px monospace;color:rgba(0,0,0,0.6);pointer-events:none;z-index:1000;";
     document.body.appendChild(fpsDiv);
-  };
+
+};
 
   p.draw = () => {
     // 시간 업데이트
@@ -68,13 +71,25 @@ const sketch = (p: p5) => {
     tCtx.fillStyle = "rgba(255, 255, 255, 0.04)";
     tCtx.fillRect(0, 0, p.width, p.height);
 
-    // 2) 물고기를 잔상 레이어에 그림
+    // 2) 리플 업데이트 + dead 제거
+    for (const ripple of ripples) {
+      ripple.update();
+    }
+    ripples = ripples.filter((r) => r.alive);
+
+    // 3) 물고기에 scatter force 적용 → update → display (ripples 전달)
     for (const fish of fishes) {
+      fish.applyScatterForce(ripples);
       fish.update(physics, time);
-      fish.display(quality, trailLayer);
+      fish.display(quality, trailLayer, ripples);
     }
 
-    // 3) 메인 캔버스: 깨끗한 배경 + 잔상 레이어 합성
+    // 4) 리플 시각 효과를 trail layer에 렌더링
+    for (const ripple of ripples) {
+      ripple.display(tCtx);
+    }
+
+    // 5) 메인 캔버스: 깨끗한 배경 + 잔상 레이어 합성
     p.background(255);
     p.image(trailLayer, 0, 0);
 
@@ -94,19 +109,23 @@ const sketch = (p: p5) => {
     // 매 10프레임마다만 FPS 텍스트 갱신
     if (p.frameCount % 10 === 0 && fpsDiv) {
       const fps = p.frameRate().toFixed(0);
-      fpsDiv.textContent = `FPS: ${fps} | 물고기: ${fishes.length} | 클릭하여 물고기 추가`;
+      fpsDiv.textContent = `FPS: ${fps} | 물고기: ${fishes.length} | 클릭하여 파문 생성`;
     }
   };
 
   p.mousePressed = () => {
-    // 마우스 클릭 시 물고기 추가
+    // 마우스 클릭 시 리플 생성
     if (
       p.mouseX >= 0 &&
       p.mouseX <= p.width &&
       p.mouseY >= 0 &&
       p.mouseY <= p.height
     ) {
-      fishes.push(new Fish(p.mouseX, p.mouseY));
+      // 최대 5개 제한
+      if (ripples.length >= 5) {
+        ripples.shift();
+      }
+      ripples.push(new Ripple(p.mouseX, p.mouseY));
     }
   };
 };
