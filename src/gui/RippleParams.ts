@@ -3,7 +3,8 @@ export const RippleParams = {
   speed: 2,             // 확장 속도 (px/frame)
   amplitude: 8,         // 왜곡 세기 (px)
   waveWidth: 50,        // 파동 폭 (px)
-  maxRadius: 200,       // 최대 반경 (px)
+  maxRadiusMin: 100,    // 최대 반경 최솟값 (px)
+  maxRadiusMax: 150,    // 최대 반경 최댓값 (px)
 
   // 시각
   ringCount: 4,         // 동심원 개수
@@ -16,7 +17,6 @@ export const RippleParams = {
 
   // 도망
   scatterStrength: 6.5, // 도망 힘 세기
-  scatterRange: 350,    // 도망 최대 거리 (px)
   scatterWindow: 0.35,  // 도망 활성 구간 (0~1)
   distanceFactor: 10,   // 거리-속도 비례상수 (높을수록 가까운 물고기가 더 빠르게 도망)
 };

@@ -12,6 +12,7 @@ export class Ripple {
   alive: boolean;
   // 생성 시점의 초기 amplitude 스냅샷
   private _initAmplitude: number;
+  private _maxRadius: number;
 
   constructor(x: number, y: number) {
     this.cx = x;
@@ -19,14 +20,15 @@ export class Ripple {
     this.radius = 0;
     this._initAmplitude = RippleParams.amplitude;
     this.amplitude = this._initAmplitude;
+    this._maxRadius = RippleParams.maxRadiusMin + Math.random() * (RippleParams.maxRadiusMax - RippleParams.maxRadiusMin);
     this.alive = true;
   }
 
   update(): void {
     this.radius += RippleParams.speed;
     // amplitude 감쇠: 반경이 커질수록 약해짐
-    this.amplitude = this._initAmplitude * (1 - this.radius / RippleParams.maxRadius);
-    if (this.radius > RippleParams.maxRadius) {
+    this.amplitude = this._initAmplitude * (1 - this.radius / this._maxRadius);
+    if (this.radius > this._maxRadius) {
       this.alive = false;
     }
   }
@@ -69,7 +71,7 @@ export class Ripple {
   display(ctx: CanvasRenderingContext2D): void {
     if (!this.alive) return;
 
-    const progress = this.radius / RippleParams.maxRadius;
+    const progress = this.radius / this._maxRadius;
     const baseAlpha = RippleParams.strokeAlpha * (1 - progress);
     if (baseAlpha <= 0) return;
 
@@ -116,7 +118,7 @@ export class Ripple {
   getScatterForce(fishX: number, fishY: number): { fx: number; fy: number } {
     const { scatterWindow, scatterStrength } = RippleParams;
     const scatterRange = Math.min(window.innerWidth * 0.3, 300);
-    const progress = this.radius / RippleParams.maxRadius;
+    const progress = this.radius / this._maxRadius;
     if (progress > scatterWindow) return { fx: 0, fy: 0 };
 
     const ddx = fishX - this.cx;

@@ -2,6 +2,7 @@ import "./types/p5.brush.d.ts";
 import { Fish } from "./agent/Fish";
 import { Physics } from "./world/Physics";
 import { Ripple } from "./effects/Ripple";
+import { playDropSound } from "./effects/DropSound";
 import {
   isMobile,
   DESKTOP_QUALITY,
@@ -126,6 +127,7 @@ const sketch = (p: p5) => {
         ripples.shift();
       }
       ripples.push(new Ripple(p.mouseX, p.mouseY));
+      playDropSound();
     }
   };
 };
