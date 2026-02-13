@@ -16,6 +16,7 @@ export const RippleParams = {
 
   // 도망
   scatterStrength: 6.5, // 도망 힘 세기
-  scatterRange: 775,    // 도망 최대 거리 (px)
+  scatterRange: 350,    // 도망 최대 거리 (px)
   scatterWindow: 0.35,  // 도망 활성 구간 (0~1)
+  distanceFactor: 10,   // 거리-속도 비례상수 (높을수록 가까운 물고기가 더 빠르게 도망)
 };

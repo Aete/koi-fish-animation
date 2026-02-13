@@ -88,6 +88,9 @@ export class Fish {
   // 이동 방향 (실제 속도 벡터의 각도)
   movementAngle: number;
 
+  // 도망 속도 복귀용
+  baseMaxSpeed: number;
+
   // 재사용 벡터 (매 프레임 할당 방지)
   private _steerVec!: p5.Vector;
   private _wanderCircle!: p5.Vector;
@@ -108,6 +111,7 @@ export class Fish {
     // 크기에 따라 속도 조정 (큰 물고기는 느리고 우아하게, 작은 물고기는 빠르게)
     const sizeRatio = p.map(this.size, 173, 302, 1.15, 0.75);
     this.maxSpeed = p.random(1.5, 2.5) * sizeRatio;
+    this.baseMaxSpeed = this.maxSpeed;
     this.maxForce = 0.15;
 
     this.wanderTheta = 0;
@@ -212,6 +216,14 @@ export class Fish {
       this.applyForce(this._steerVec);
     }
 
+    // maxSpeed 서서히 복귀 (부스트 → 원래 속도)
+    if (this.maxSpeed > this.baseMaxSpeed) {
+      this.maxSpeed += (this.baseMaxSpeed - this.maxSpeed) * 0.05;
+      if (this.maxSpeed - this.baseMaxSpeed < 0.01) {
+        this.maxSpeed = this.baseMaxSpeed;
+      }
+    }
+
     // 물리 업데이트
     this.velocity.add(this.acceleration);
     this.velocity.limit(this.maxSpeed);
@@ -289,7 +301,16 @@ export class Fish {
       const { fx, fy } = ripple.getScatterForce(this.position.x, this.position.y);
       if (fx !== 0 || fy !== 0) {
         this._steerVec.set(fx, fy);
+        this._steerVec.limit(this.maxForce * 8);
         this.applyForce(this._steerVec);
+
+        // 도망 시 속도 부스트 (최대 baseMaxSpeed의 3배까지)
+        const forceMag = Math.sqrt(fx * fx + fy * fy);
+        const boost = Math.min(forceMag * 0.3, this.baseMaxSpeed * 2);
+        const boostedSpeed = this.baseMaxSpeed + boost;
+        if (boostedSpeed > this.maxSpeed) {
+          this.maxSpeed = boostedSpeed;
+        }
       }
     }
   }

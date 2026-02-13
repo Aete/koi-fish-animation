@@ -60,7 +60,7 @@ const sketch = (p: p5) => {
       "position:fixed;top:10px;left:10px;font:12px monospace;color:rgba(0,0,0,0.6);pointer-events:none;z-index:1000;";
     document.body.appendChild(fpsDiv);
 
-};
+  };
 
   p.draw = () => {
     // 시간 업데이트

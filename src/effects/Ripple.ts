@@ -114,7 +114,8 @@ export class Ripple {
    * 리플 중심으로부터의 도망 힘
    */
   getScatterForce(fishX: number, fishY: number): { fx: number; fy: number } {
-    const { scatterWindow, scatterRange, scatterStrength } = RippleParams;
+    const { scatterWindow, scatterStrength } = RippleParams;
+    const scatterRange = Math.min(window.innerWidth * 0.3, 300);
     const progress = this.radius / RippleParams.maxRadius;
     if (progress > scatterWindow) return { fx: 0, fy: 0 };
 
@@ -126,7 +127,10 @@ export class Ripple {
     if (dist < 1) return { fx: 0, fy: 0 };
     if (dist > scatterRange) return { fx: 0, fy: 0 };
 
-    const strength = scatterStrength * (1 - dist / scatterRange) * (1 - progress / scatterWindow);
+    const distRatio = 1 - dist / scatterRange;
+    // distanceFactor: 가까운 물고기에 추가 배율 (1 + factor * distRatio)
+    const proximityBoost = 1 + RippleParams.distanceFactor * distRatio;
+    const strength = scatterStrength * distRatio * proximityBoost * (1 - progress / scatterWindow);
     const invDist = 1 / dist;
 
     return {
