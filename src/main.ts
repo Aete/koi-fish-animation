@@ -130,7 +130,7 @@ const sketch = (p: p5) => {
       playDropSound();
       // Mobile haptic feedback (short vibration)
       if (isMobile() && navigator.vibrate) {
-        navigator.vibrate(30);
+        navigator.vibrate(60);
       }
     }
   };
