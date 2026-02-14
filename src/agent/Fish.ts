@@ -197,23 +197,21 @@ export class Fish {
     const wanderForce = this.wander();
     this.applyForce(wanderForce);
 
-    // 화면 경계 처리 (부드럽게 튕김) - 벡터 재사용
-    const margin = 50;
-    if (this.position.x < margin) {
-      this._steerVec.set(this.maxForce, 0);
-      this.applyForce(this._steerVec);
+    // 화면 경계 처리 (wraparound - 반대편에서 등장)
+    const margin = this.size * 0.2; // 몸이 완전히 벗어난 뒤 등장
+    if (this.position.x < -margin) {
+      this.position.x = p.width + margin;
+      this.resetSegments();
+    } else if (this.position.x > p.width + margin) {
+      this.position.x = -margin;
+      this.resetSegments();
     }
-    if (this.position.x > p.width - margin) {
-      this._steerVec.set(-this.maxForce, 0);
-      this.applyForce(this._steerVec);
-    }
-    if (this.position.y < margin) {
-      this._steerVec.set(0, this.maxForce);
-      this.applyForce(this._steerVec);
-    }
-    if (this.position.y > p.height - margin) {
-      this._steerVec.set(0, -this.maxForce);
-      this.applyForce(this._steerVec);
+    if (this.position.y < -margin) {
+      this.position.y = p.height + margin;
+      this.resetSegments();
+    } else if (this.position.y > p.height + margin) {
+      this.position.y = -margin;
+      this.resetSegments();
     }
 
     // maxSpeed 서서히 복귀 (부스트 → 원래 속도)
@@ -282,6 +280,21 @@ export class Fish {
       // 세그먼트의 시작점을 이전 세그먼트의 끝점에 정확히 맞춤
       this.segments[i].a.set(this.segments[i - 1].b.x, this.segments[i - 1].b.y);
       this.segments[i].angle = prevAngle + angleOffset;
+      this.segments[i].calculateB();
+    }
+  }
+
+  /**
+   * 워프 시 세그먼트를 머리 위치 기준으로 재배치
+   */
+  resetSegments(): void {
+    for (let i = 0; i < this.segments.length; i++) {
+      if (i === 0) {
+        this.segments[i].a.set(this.position.x, this.position.y);
+      } else {
+        this.segments[i].a.set(this.segments[i - 1].b.x, this.segments[i - 1].b.y);
+      }
+      this.segments[i].angle = this.movementAngle + Math.PI;
       this.segments[i].calculateB();
     }
   }
