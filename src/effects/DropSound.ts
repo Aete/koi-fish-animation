@@ -26,10 +26,10 @@ export function playDropSound(): void {
 
   const source = ctx.createBufferSource();
   source.buffer = audioBuffer;
-  // 주파수를 약간 낮춤 (playbackRate < 1 → 피치 다운)
+  // Slightly lower pitch (playbackRate < 1 = pitch down)
   source.playbackRate.value = 2;
 
-  // 짧게 자르기: 페이드아웃 후 정지
+  // Trim short: fade out then stop
   const gain = ctx.createGain();
   const duration = 0.3;
   gain.gain.setValueAtTime(1, ctx.currentTime);

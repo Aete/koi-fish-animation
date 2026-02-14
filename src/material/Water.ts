@@ -1,33 +1,33 @@
 import type p5 from 'p5';
 
 /**
- * Water - 물의 물리적 특성을 정의하는 클래스
- * 수묵화/수채화 느낌을 위한 유체 역학 시뮬레이션
+ * Water - Defines physical properties of water
+ * Fluid dynamics simulation for ink wash / watercolor aesthetics
  */
 export class Water {
-  // 물의 밀도 (density)
+  // Water density
   density: number;
 
-  // 점성 (viscosity) - 물의 저항력
+  // Viscosity - water resistance
   viscosity: number;
 
-  // 유체 저항 계수 (drag coefficient)
+  // Drag coefficient
   dragCoefficient: number;
 
-  // 부력 (buoyancy)
+  // Buoyancy (gravitational acceleration)
   buoyancy: number;
 
   constructor() {
     this.density = 1000; // kg/m³
     this.viscosity = 0.89; // mPa·s at 25°C
-    this.dragCoefficient = 0.47; // 일반적인 물체의 항력 계수
-    this.buoyancy = 9.81; // 중력 가속도
+    this.dragCoefficient = 0.47;
+    this.buoyancy = 9.81;
   }
 
   /**
-   * 물의 저항력 계산
-   * @param velocity - 물체의 속도 벡터
-   * @param area - 물체의 단면적
+   * Calculate water drag force
+   * @param velocity - Object velocity vector
+   * @param area - Object cross-sectional area
    */
   calculateDrag(velocity: p5.Vector, area: number = 1): p5.Vector {
     const speed = velocity.mag();
@@ -41,7 +41,7 @@ export class Water {
   }
 
   /**
-   * 점성에 의한 저항 계산
+   * Calculate viscous resistance
    */
   calculateViscosity(velocity: p5.Vector): p5.Vector {
     const viscousForce = velocity.copy();
@@ -50,10 +50,10 @@ export class Water {
   }
 
   /**
-   * 물의 흐름 효과 (선택적)
-   * @param x - x 좌표
-   * @param y - y 좌표
-   * @param time - 시간
+   * Water flow field effect
+   * @param x - x coordinate
+   * @param y - y coordinate
+   * @param time - time
    */
   getFlowField(x: number, y: number, time: number): p5.Vector {
     const p = (window as any).p5Instance;

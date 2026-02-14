@@ -1,22 +1,22 @@
 export const RippleParams = {
-  // 파동
-  speed: 2,             // 확장 속도 (px/frame)
-  amplitude: 8,         // 왜곡 세기 (px)
-  waveWidth: 50,        // 파동 폭 (px)
-  maxRadiusMin: 100,    // 최대 반경 최솟값 (px)
-  maxRadiusMax: 150,    // 최대 반경 최댓값 (px)
+  // Wave
+  speed: 2,             // expansion speed (px/frame)
+  amplitude: 8,         // distortion intensity (px)
+  waveWidth: 50,        // wave width (px)
+  maxRadiusMin: 100,    // minimum max radius (px)
+  maxRadiusMax: 150,    // maximum max radius (px)
 
-  // 시각
-  ringCount: 4,         // 동심원 개수
-  ringGap: 30,          // 동심원 간격 (px)
-  lineWidth: 8,         // 선 두께
-  strokeColor: '#847d75', // 동심원 선 색
-  strokeAlpha: 0.055,     // 선 투명도
-  fillColor: '#ffffff',   // 동심원 면 색
-  fillAlpha: 0,           // 면 투명도
+  // Visual
+  ringCount: 4,         // number of concentric rings
+  ringGap: 30,          // ring spacing (px)
+  lineWidth: 8,         // stroke width
+  strokeColor: '#847d75', // ring stroke color
+  strokeAlpha: 0.055,     // stroke opacity
+  fillColor: '#ffffff',   // ring fill color
+  fillAlpha: 0,           // fill opacity
 
-  // 도망
-  scatterStrength: 6.5, // 도망 힘 세기
-  scatterWindow: 0.35,  // 도망 활성 구간 (0~1)
-  distanceFactor: 10,   // 거리-속도 비례상수 (높을수록 가까운 물고기가 더 빠르게 도망)
+  // Scatter
+  scatterStrength: 6.5, // scatter force intensity
+  scatterWindow: 0.35,  // scatter active range (0~1)
+  distanceFactor: 10,   // distance-speed proportionality (higher = closer fish flee faster)
 };
