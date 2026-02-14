@@ -128,6 +128,10 @@ const sketch = (p: p5) => {
       }
       ripples.push(new Ripple(p.mouseX, p.mouseY));
       playDropSound();
+      // 모바일 햅틱 피드백 (짧은 진동)
+      if (isMobile() && navigator.vibrate) {
+        navigator.vibrate(30);
+      }
     }
   };
 };
