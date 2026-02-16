@@ -10,9 +10,9 @@ export const RippleParams = {
   ringCount: 4,         // number of concentric rings
   ringGap: 30,          // ring spacing (px)
   lineWidth: 8,         // stroke width
-  strokeColor: '#847d75', // ring stroke color
+  strokeColor: '#465d46', // ring stroke color (greenish black - ink wash)
   strokeAlpha: 0.055,     // stroke opacity
-  fillColor: '#ffffff',   // ring fill color
+  fillColor: '#868d86',   // ring fill color (muted green-gray)
   fillAlpha: 0,           // fill opacity
 
   // Scatter
