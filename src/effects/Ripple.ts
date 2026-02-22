@@ -13,6 +13,8 @@ export class Ripple {
   // Snapshot of initial amplitude at creation
   private _initAmplitude: number;
   private _maxRadius: number;
+  private _sr: number; private _sg: number; private _sb: number;
+  private _fr: number; private _fg: number; private _fb: number;
 
   constructor(x: number, y: number) {
     this.cx = x;
@@ -22,6 +24,15 @@ export class Ripple {
     this.amplitude = this._initAmplitude;
     this._maxRadius = RippleParams.maxRadiusMin + Math.random() * (RippleParams.maxRadiusMax - RippleParams.maxRadiusMin);
     this.alive = true;
+    // Parse hex colors once at construction instead of every frame
+    const sc = RippleParams.strokeColor;
+    this._sr = parseInt(sc.slice(1, 3), 16);
+    this._sg = parseInt(sc.slice(3, 5), 16);
+    this._sb = parseInt(sc.slice(5, 7), 16);
+    const fc = RippleParams.fillColor;
+    this._fr = parseInt(fc.slice(1, 3), 16);
+    this._fg = parseInt(fc.slice(3, 5), 16);
+    this._fb = parseInt(fc.slice(5, 7), 16);
   }
 
   update(): void {
@@ -75,15 +86,9 @@ export class Ripple {
     const baseAlpha = RippleParams.strokeAlpha * (1 - progress);
     if (baseAlpha <= 0) return;
 
-    const { strokeColor, fillColor, fillAlpha, ringCount, ringGap, lineWidth } = RippleParams;
-
-    // Parse hex → r,g,b
-    const sr = parseInt(strokeColor.slice(1, 3), 16);
-    const sg = parseInt(strokeColor.slice(3, 5), 16);
-    const sb = parseInt(strokeColor.slice(5, 7), 16);
-    const fr = parseInt(fillColor.slice(1, 3), 16);
-    const fg = parseInt(fillColor.slice(3, 5), 16);
-    const fb = parseInt(fillColor.slice(5, 7), 16);
+    const { fillAlpha, ringCount, ringGap, lineWidth } = RippleParams;
+    const sr = this._sr, sg = this._sg, sb = this._sb;
+    const fr = this._fr, fg = this._fg, fb = this._fb;
 
     ctx.save();
     ctx.lineWidth = lineWidth;

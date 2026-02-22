@@ -13,7 +13,7 @@ export const DESKTOP_QUALITY: QualitySettings = {
   stripeSpacing: 1.0,
   stepSize: 1.0,
   spotStep: 1.0,
-  frameRate: 0,
+  frameRate: 60,
 };
 
 export const MOBILE_QUALITY: QualitySettings = {

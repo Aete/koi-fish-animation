@@ -486,9 +486,11 @@ export class Fish {
       // Width-direction gradient
       const widthCenter = 1 - Math.abs(ratio - 0.5) * 2;
       const alpha = 0.01 + widthCenter * widthCenter * 0.012;
-      ctx.fillStyle = `rgba(30, 25, 20, ${alpha})`;
+      const baseStyle = `rgba(30, 25, 20, ${alpha})`;
+      ctx.fillStyle = baseStyle;
 
       const totalPts = upperPoints.length;
+      const headFadeStart = Math.floor(totalPts * 0.7);
       for (let i = 0; i < totalPts - 1; i++) {
         const localRatioLimit1 = widths[i] * invMaxWidth;
         const localRatioLimit2 = widths[i + 1] * invMaxWidth;
@@ -496,10 +498,12 @@ export class Fish {
 
         if (ratio < margin || ratio > 1 - margin) continue;
 
-        // Head fade: reduce density near head
-        const lengthPos = i / totalPts;
-        const headFade = lengthPos > 0.7 ? 1 - (lengthPos - 0.7) / 0.3 : 1;
-        ctx.fillStyle = `rgba(30, 25, 20, ${alpha * headFade})`;
+        // Head fade: only update fillStyle in the last 30% of the body
+        if (i >= headFadeStart) {
+          const lengthPos = i / totalPts;
+          const headFade = 1 - (lengthPos - 0.7) / 0.3;
+          ctx.fillStyle = `rgba(30, 25, 20, ${alpha * headFade})`;
+        }
 
         const ux1 = upperPoints[i].x, uy1 = upperPoints[i].y;
         const lx1 = lowerPoints[i].x, ly1 = lowerPoints[i].y;
